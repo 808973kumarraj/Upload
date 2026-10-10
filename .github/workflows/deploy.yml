@@ -23,40 +23,56 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: false
+
       - name: Find and Extract ZIP
         run: |
-          mkdir -p public
-
           ZIP=$(find . -maxdepth 1 -type f -iname '*.zip' | head -n 1)
 
           if [ -z "$ZIP" ]; then
-            echo "ERROR: No ZIP file found in repository root."
+            echo "ERROR: ZIP file not found"
             exit 1
           fi
 
-          echo "Extracting: $ZIP"
-          unzip -o "$ZIP" -d public
+          mkdir -p extracted
+          unzip -o "$ZIP" -d extracted
 
-          touch public/.nojekyll
+      - name: Find React Project
+        run: |
+          PROJECT=$(find extracted -type f -name package.json -not -path '*/node_modules/*' | head -n 1)
 
-          echo "Extracted files:"
-          find public -maxdepth 3 -type f | head -100
+          if [ -z "$PROJECT" ]; then
+            echo "ERROR: package.json not found"
+            exit 1
+          fi
+
+          echo "PROJECT_DIR=$(dirname "$PROJECT")" >> "$GITHUB_ENV"
+
+      - name: Install Dependencies
+        working-directory: .
+        run: |
+          cd "$PROJECT_DIR"
+          npm install
+
+      - name: Build React Website
+        run: |
+          cd "$PROJECT_DIR"
+          npm run build
 
       - name: Prepare Website
         run: |
-          if [ -f public/index.html ]; then
-            echo "Website entry point found."
-          else
-            echo "ERROR: index.html not found at public/index.html."
-            echo "The ZIP may contain source code that requires a build."
-            find public -maxdepth 3 -type f | head -100
-            exit 1
-          fi
+          mkdir -p public
+          cp -r "$PROJECT_DIR"/dist/. public/
+          touch public/.nojekyll
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload Website Artifact
+      - name: Upload Website
         uses: actions/upload-pages-artifact@v3
         with:
           path: public
