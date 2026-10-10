@@ -1,4 +1,4 @@
-name: Deploy Website
+name: Deploy Static Website
 
 on:
   push:
@@ -18,73 +18,27 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Find and Extract Project ZIP
-        shell: bash
+      - name: Verify website file
         run: |
-          ZIP=$(find . -maxdepth 1 -type f -iname '*.zip' | head -n 1)
-
-          if [ -z "$ZIP" ]; then
-            echo "ERROR: Project ZIP not found."
+          if [ ! -f index.html ]; then
+            echo "ERROR: index.html not found."
             exit 1
           fi
 
-          mkdir -p extracted
-          unzip -o "$ZIP" -d extracted
-
-      - name: Locate React Project
-        shell: bash
-        run: |
-          PACKAGE=$(find extracted -type f -name package.json \
-            -not -path '*/node_modules/*' | head -n 1)
-
-          if [ -z "$PACKAGE" ]; then
-            echo "ERROR: package.json not found."
-            exit 1
-          fi
-
-          PROJECT_DIR="$(dirname "$PACKAGE")"
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
-          echo "Project directory: $PROJECT_DIR"
-
-      - name: Install Dependencies
-        run: npm install
-        working-directory: ${{ env.PROJECT_DIR }}
-
-      - name: Build React Application
-        run: npm run build
-        working-directory: ${{ env.PROJECT_DIR }}
-
-      - name: Verify Build Output
-        shell: bash
-        run: |
-          if [ ! -f "$PROJECT_DIR/dist/index.html" ]; then
-            echo "ERROR: Build did not produce dist/index.html."
-            exit 1
-          fi
-
-          echo "Build completed successfully."
-
-      - name: Prepare GitHub Pages
+      - name: Prepare website
         run: |
           mkdir -p public
-          cp -r "$PROJECT_DIR/dist/." public/
+          cp index.html public/index.html
           touch public/.nojekyll
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload Website Artifact
+      - name: Upload website artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: public
