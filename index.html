@@ -1,0 +1,1584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="description" content="Interactive visual simulator and engineering workstation for the Apache Spark Catalyst query optimizer, physical planner, and whole-stage code generation engine."/>
+<title>Spark Catalyst Optimizer Simulator</title>
+<style>
+/* ============ BASE / TOKENS ============ */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+ --s950:#020617;--s900:#0f172a;--s800:#1e293b;--s700:#334155;--s600:#475569;--s500:#64748b;--s400:#94a3b8;--s300:#cbd5e1;--s200:#e2e8f0;--s100:#f1f5f9;
+ --cy3:#67e8f9;--cy4:#22d3ee;--cy5:#06b6d4;--cy6:#0891b2;--cy8:#155e75;--cy9:#164e63;--cy95:#083344;
+ --am3:#fcd34d;--am4:#fbbf24;--am5:#f59e0b;--am6:#d97706;--am9:#78350f;--am95:#451a03;
+ --em3:#6ee7b7;--em4:#34d399;--em7:#047857;--em8:#065f46;--em95:#022c22;
+ --ro3:#fda4af;--ro4:#fb7185;--ro5:#f43f5e;--ro8:#9f1239;--ro95:#4c0519;
+ --in3:#a5b4fc;--in4:#818cf8;--in7:#4338ca;--in8:#3730a3;--in95:#1e1b4b;
+ --bl4:#60a5fa;--bl7:#1d4ed8;--bl95:#172554;
+ --pu3:#d8b4fe;--pu4:#c084fc;--pu7:#7e22ce;--pu95:#3b0764;
+}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--s950);color:var(--s100);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:14px;line-height:1.45;-webkit-tap-highlight-color:transparent}
+button{font-family:inherit;border:none;background:none;color:inherit;cursor:pointer;touch-action:manipulation}
+::selection{background:var(--cy9);color:#fff}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}
+.ic{display:inline-block;vertical-align:middle;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.s25{width:10px;height:10px}.s3{width:12px;height:12px}.s35{width:14px;height:14px}.s4{width:16px;height:16px}.s45{width:18px;height:18px}
+.hide-sm{display:none}.hide-md{display:none}.hide-lg{display:none}
+@media(min-width:640px){.hide-sm{display:inline-flex}}
+@media(min-width:768px){.hide-md{display:inline-flex}}
+@media(min-width:1024px){.hide-lg{display:flex}}
+/* ============ HEADER ============ */
+#hdr{background:var(--s950);border-bottom:1px solid var(--s800);padding:8px 16px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;color:var(--s200)}
+.hdr-left{display:flex;align-items:center;gap:12px}
+.brand-ic{width:32px;height:32px;border-radius:6px;background:linear-gradient(to top right,#0891b2,#4f46e5);display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:inset 0 0 8px rgba(0,0,0,.35)}
+.brand-t{display:flex;align-items:center;gap:6px}
+.brand-t b{font-weight:700;letter-spacing:-.02em;color:#fff;font-size:13px}
+@media(min-width:640px){.brand-t b{font-size:15px}}
+.sim-badge{font-size:10px;font-family:ui-monospace,monospace;padding:1px 6px;background:var(--in95);border:1px solid var(--in8);color:var(--in3);border-radius:4px}
+.engine-row{font-size:11px;color:var(--s400);display:flex;align-items:center;gap:4px}
+.dd-wrap{position:relative;display:inline-block}
+.dd-btn{font-weight:500;color:var(--cy3);text-decoration:underline;text-decoration-style:dotted;display:inline-flex;align-items:center;gap:2px;font-size:13px}
+.dd-panel{position:absolute;left:0;top:calc(100% + 4px);width:288px;background:var(--s900);border:1px solid var(--s700);border-radius:6px;box-shadow:0 20px 25px -5px rgba(0,0,0,.5);padding:4px 0;z-index:50}
+.dd-panel.wide{width:320px}
+.dd-cap{padding:4px 12px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--s400);font-family:ui-monospace,monospace;border-bottom:1px solid var(--s800)}
+.dd-item{width:100%;text-align:left;padding:8px 12px;font-size:12px;display:flex;flex-direction:column;gap:1px;color:var(--s300)}
+.dd-item:hover{background:var(--s800)}
+.dd-item.act{background:rgba(30,41,59,.8);color:var(--cy3);font-weight:600}
+.dd-item .sub{font-size:10px;color:var(--s400)}
+.dd-item .sub2{font-size:11px;color:var(--s400);margin-top:2px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.dd-item.act .sub2{color:var(--am3)}
+.preset-btn{padding:4px 10px;background:var(--s900);border:1px solid var(--s700);border-radius:4px;font-size:12px;color:var(--s300);display:inline-flex;align-items:center;gap:6px;max-width:220px}
+.preset-btn span{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hdr-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.st-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+.st-err{background:rgba(76,5,25,.8);color:var(--ro3);border:1px solid var(--ro8)}
+.st-run{background:rgba(8,51,68,.8);color:var(--cy3);border:1px solid var(--cy8)}
+.st-done{background:rgba(2,44,34,.8);color:var(--em3);border:1px solid var(--em8)}
+.st-cust{background:rgba(69,26,3,.8);color:var(--am3);border:1px solid #92400e}
+.st-def{background:var(--s800);color:var(--s300);border:1px solid var(--s700)}
+.step-ctr{background:var(--s900);border:1px solid var(--s800);padding:4px 10px;border-radius:4px;font-family:ui-monospace,monospace;font-size:12px;display:flex;align-items:center;gap:4px;color:var(--s300)}
+.step-ctr .a{color:var(--s500)}.step-ctr .b{font-weight:700;color:var(--cy4)}.step-ctr .c{color:var(--s600)}.step-ctr .d{color:var(--s400)}
+.view-sw{background:var(--s900);padding:2px;border-radius:4px;border:1px solid var(--s800);font-size:12px;display:none}
+@media(min-width:640px){.view-sw{display:flex}}
+.vsw-btn{padding:4px 10px;border-radius:4px;display:inline-flex;align-items:center;gap:4px;color:var(--s400);transition:color .15s}
+.vsw-btn:hover{color:var(--s200)}
+.vsw-btn.act{background:var(--s800);color:#fff;font-weight:500;box-shadow:0 1px 2px rgba(0,0,0,.4)}
+.hdr-btn{padding:4px 10px;background:var(--s900);border:1px solid var(--s700);color:var(--s300);border-radius:4px;font-size:12px;display:inline-flex;align-items:center;gap:4px;transition:color .15s,background .15s}
+.hdr-btn:hover{background:var(--s800);color:#fff}
+.guide-btn{background:rgba(30,27,75,.6);border:1px solid var(--in7);color:#c7d2fe}
+.guide-btn:hover{background:rgba(30,27,75,.8)}
+/* ============ CONTROL DECK ============ */
+#deck{background:var(--s900);border-bottom:1px solid var(--s800);padding:10px 16px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;font-size:14px;user-select:none;-webkit-user-select:none}
+.dk-group{display:flex;align-items:center;gap:6px}
+.ctl-btn{padding:6px 10px;border-radius:4px;display:inline-flex;align-items:center;gap:4px;font-weight:500;transition:all .15s;color:var(--s200);background:var(--s800)}
+.ctl-btn:hover{background:var(--s700)}
+.ctl-btn:active{transform:scale(.95)}
+.ctl-btn.dis{color:var(--s600);background:rgba(30,41,59,.4);cursor:not-allowed}
+.ctl-btn.dis:active{transform:none}
+.play-btn{padding:6px 12px;border-radius:4px;display:inline-flex;align-items:center;gap:6px;font-weight:600;color:#fff;transition:all .15s;box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.play-btn.go{background:#059669}.play-btn.go:hover{background:#10b981}
+.play-btn.stop{background:var(--am6)}.play-btn.stop:hover{background:var(--am5)}
+.play-btn:active{transform:scale(.95)}
+.ctl-ico{padding:6px;border-radius:4px;color:var(--s300);background:rgba(30,41,59,.6)}
+.ctl-ico:hover{background:var(--s800);color:#fff}
+.ctl-def{padding:4px 10px;font-size:12px;border-radius:4px;border:1px solid var(--s700);color:var(--am3);display:inline-flex;align-items:center;gap:4px}
+.ctl-def:hover{background:rgba(69,26,3,.4)}
+.vdiv{width:1px;height:16px;background:var(--s800);margin:0 4px}
+.ev-banner{display:none;align-items:center;gap:8px;background:rgba(2,6,23,.7);border:1px solid rgba(30,41,59,.8);padding:4px 12px;border-radius:4px;max-width:448px;overflow:hidden}
+.ev-banner .l{font-size:12px;text-transform:uppercase;font-family:ui-monospace,monospace;color:var(--cy4);display:inline-flex;align-items:center;gap:4px;flex-shrink:0}
+.ev-banner .v{font-size:12px;color:var(--s300);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(min-width:1024px){.ev-banner{display:flex}}
+.spd-wrap{display:flex;align-items:center;background:rgba(30,41,59,.8);border-radius:4px;padding:2px;border:1px solid rgba(51,65,85,.6);font-size:12px}
+.spd-btn{padding:2px 8px;border-radius:4px;font-family:ui-monospace,monospace;color:var(--s400);transition:color .15s}
+.spd-btn:hover{color:var(--s200)}
+.spd-btn.act{background:var(--cy6);color:#fff;font-weight:700}
+.tgl-btn{padding:4px 10px;border-radius:4px;border:1px solid;font-size:12px;font-weight:500;display:inline-flex;align-items:center;gap:6px;transition:all .15s}
+.tgl-btn.on{background:var(--cy95);border-color:var(--cy8);color:var(--cy3)}
+.tgl-btn.off{background:var(--s800);border-color:var(--s700);color:var(--s300)}
+/* ============ WORKBENCH ============ */
+#wb{background:var(--s950);border-bottom:1px solid var(--s800)}
+.wb-grid{display:grid;grid-template-columns:1fr}
+@media(min-width:1024px){.wb-grid.split{grid-template-columns:1fr 1fr}.wb-grid.split .wb-panel+.wb-panel{border-left:1px solid var(--s800)}}
+.wb-panel{display:flex;flex-direction:column;height:280px;background:var(--s950)}
+.wb-tb{background:rgba(15,23,42,.9);padding:6px 12px;border-bottom:1px solid var(--s800);display:flex;align-items:center;justify-content:space-between;font-size:12px;flex-wrap:wrap;gap:6px}
+.wb-tl{display:flex;align-items:center;gap:6px;color:var(--s300);font-family:ui-monospace,monospace}
+.wb-tl b{font-weight:600;color:var(--s200)}
+.tag{font-size:10px;padding:1px 4px;border-radius:4px;border:1px solid var(--s700);color:var(--s400);background:var(--s800)}
+.tag.am{background:rgba(69,26,3,.8);color:var(--am3);border-color:#92400e}
+.tb-btn{padding:2px 8px;background:var(--s800);color:var(--cy3);border:1px solid var(--s700);border-radius:4px;font-size:11px;display:inline-flex;align-items:center;gap:4px}
+.tb-btn:hover{background:var(--s700);color:#a5f3fc}
+.ico-btn{padding:4px;border-radius:4px;color:var(--s400)}
+.ico-btn:hover{background:var(--s800);color:var(--s200)}
+.wb-code{flex:1;overflow:auto;padding:8px;font-family:ui-monospace,monospace;font-size:12px;color:var(--s300);line-height:1.6;-webkit-overflow-scrolling:touch}
+.wb-code table{width:100%;border-collapse:collapse}
+.wb-code td{padding:1px 0;vertical-align:top}
+.lno{width:32px;text-align:right;padding-right:12px!important;color:var(--s600);font-size:11px;user-select:none;-webkit-user-select:none}
+.ltxt{white-space:pre-wrap;word-break:break-word}
+tr.ln-act{background:rgba(8,51,68,.6);box-shadow:inset 2px 0 0 var(--cy4)}
+tr.ln-act .ltxt{color:#cffafe;font-weight:600}
+tr:not(.ln-act):hover{background:rgba(15,23,42,.4)}
+.k-cyan{color:var(--cy3);font-weight:500}.k-indigo{color:var(--in3)}.k-plain{color:var(--s200)}.k-cmt{color:var(--s500);font-style:italic}
+.pdot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--cy4);margin-right:6px;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes ping{0%{transform:scale(1);opacity:1}80%,100%{transform:scale(2.2);opacity:0}}
+.ping{animation:ping 1.2s cubic-bezier(0,0,.2,1) infinite}
+.exec-btn{padding:4px 12px;background:linear-gradient(to right,var(--am6),var(--am5));color:var(--s950);font-weight:700;border-radius:4px;font-size:12px;display:inline-flex;align-items:center;gap:6px;box-shadow:0 4px 6px -1px rgba(0,0,0,.3);transition:all .15s}
+.exec-btn:active{transform:scale(.95)}
+.exec-btn.dis{opacity:.5;cursor:not-allowed}
+.err-bar{background:rgba(76,5,25,.7);border-bottom:1px solid rgba(159,18,57,.8);padding:4px 12px;font-size:12px;color:var(--ro3);display:flex;align-items:center;gap:6px}
+.ed-wrap{flex:1;position:relative;display:flex;overflow:hidden}
+.gutter{width:36px;background:rgba(15,23,42,.6);border-right:1px solid rgba(30,41,59,.6);padding:8px;text-align:right;user-select:none;-webkit-user-select:none;font-family:ui-monospace,monospace;font-size:12px;color:var(--s600);line-height:1.6;overflow:hidden}
+#ed-ta{flex:1;padding:8px;background:transparent;border:none;resize:none;outline:none;font-family:ui-monospace,monospace;font-size:12px;color:var(--s200);line-height:1.6;overflow:auto;-webkit-overflow-scrolling:touch}
+/* ============ MAIN LAYOUT ============ */
+#main{flex:1;padding:12px;max-width:1720px;margin:0 auto;width:100%;display:flex;flex-direction:column;gap:16px}
+@media(min-width:640px){#main{padding:16px}}
+.row-a{display:grid;grid-template-columns:1fr;gap:16px}
+@media(min-width:1024px){.row-a{grid-template-columns:repeat(12,1fr)}.viz-col{grid-column:span 12}.viz-col.wp{grid-column:span 8}.pr-col{grid-column:span 4}}
+@media(min-width:1280px){.viz-col.wp{grid-column:span 9}.pr-col{grid-column:span 3}}
+.card{background:var(--s900);border:1px solid var(--s800);border-radius:8px;color:var(--s200)}
+.card-hd{display:flex;align-items:center;justify-content:space-between;padding-bottom:8px;margin-bottom:12px;border-bottom:1px solid var(--s800);font-size:12px;flex-wrap:wrap;gap:8px}
+.card-t{display:flex;align-items:center;gap:6px;font-weight:600;color:var(--s300)}
+/* ============ CATALYST VISUALIZER ============ */
+.viz{background:rgba(15,23,42,.9);border:1px solid var(--s800);border-radius:8px;overflow:hidden;display:flex;flex-direction:column;height:520px}
+.viz-top{background:var(--s950);padding:8px 12px;border-bottom:1px solid var(--s800);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
+.viz-lab{display:flex;align-items:center;gap:6px;font-size:12px;font-family:ui-monospace,monospace}
+.viz-lab b{font-weight:600;color:var(--s200)}
+.ph-row{display:flex;align-items:center;gap:4px;font-size:11px;font-family:ui-monospace,monospace;overflow-x:auto;padding:2px 0;max-width:100%}
+.ph-pill{display:flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;border:1px solid;transition:all .2s;white-space:nowrap}
+.ph-cur{background:var(--cy95);border-color:var(--cy5);color:var(--cy3);font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.3),0 0 12px rgba(8,51,68,.3)}
+.ph-done{background:rgba(30,41,59,.8);border-color:var(--s700);color:var(--s300)}
+.ph-todo{background:rgba(15,23,42,.4);border-color:var(--s800);color:var(--s500)}
+.tab-row{display:flex;align-items:center;gap:4px;background:var(--s900);padding:2px;border-radius:4px;border:1px solid var(--s800);font-size:12px;flex-wrap:wrap}
+.tab-btn{padding:4px 8px;border-radius:4px;display:inline-flex;align-items:center;gap:4px;color:var(--s400);transition:color .15s}
+.tab-btn:hover{color:var(--s200)}
+.tab-btn.act{background:var(--s800);color:var(--cy3);font-weight:500}
+.viz-body{flex:1;display:flex;overflow:hidden}
+.viz-canvas{flex:1;overflow:auto;padding:16px;-webkit-overflow-scrolling:touch}
+.tree-col{display:flex;flex-direction:column;align-items:center}
+.node-box{padding:8px 12px;border-radius:4px;border:1px solid;cursor:pointer;transition:all .2s;max-width:288px;width:auto;text-align:center;position:relative}
+.node-box:hover{filter:brightness(1.1);box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.node-box.sel{box-shadow:0 0 0 2px var(--cy4),0 10px 15px -3px rgba(2,6,23,.8)}
+.nb-blue{border-color:var(--bl7);background:rgba(23,37,84,.4);color:#bfdbfe}
+.nb-em{border-color:var(--em7);background:rgba(2,44,34,.4);color:#a7f3d0}
+.nb-in{border-color:var(--in7);background:rgba(30,27,75,.4);color:#c7d2fe}
+.nb-pu{border-color:var(--pu7);background:rgba(59,7,100,.4);color:#e9d5ff}
+.nb-ro{border-color:#be123c;background:rgba(76,5,19,.4);color:#fecdd3}
+.nb-cy{border-color:var(--cy6);background:rgba(8,51,68,.4);color:#a5f3fc}
+.nb-sl{border-color:var(--s700);background:var(--s900);color:var(--s200)}
+.node-t{font-size:12px;font-weight:700;font-family:ui-monospace,monospace;letter-spacing:-.01em;display:flex;align-items:center;justify-content:center;gap:4px}
+.node-d{font-size:10px;color:var(--s400);font-family:ui-monospace,monospace;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}
+.tbadge{position:absolute;top:-8px;right:-8px;font-size:9px;font-family:ui-monospace,monospace;padding:1px 6px;border-radius:999px;background:var(--cy6);color:#fff;font-weight:700;letter-spacing:.05em;box-shadow:0 1px 3px rgba(0,0,0,.4);white-space:nowrap}
+.cn-down{width:1px;height:16px;background:var(--s700)}
+.ch-row{display:flex;align-items:flex-start;gap:16px;position:relative}
+.ch-row .tree-col::before{content:"";display:block;width:1px;height:12px;background:var(--s700)}
+.hline{position:absolute;top:0;left:15%;right:15%;height:1px;background:var(--s700)}
+.drawer{width:288px;background:var(--s950);border-left:1px solid var(--s800);padding:12px;overflow:auto;flex-shrink:0;display:flex;flex-direction:column;font-size:12px}
+@media(max-width:767px){.drawer{position:absolute;right:0;top:0;bottom:0;z-index:20;box-shadow:-8px 0 20px rgba(0,0,0,.5)}}
+.dr-hd{display:flex;align-items:center;justify-content:space-between;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--s800)}
+.dr-lab{font-size:10px;text-transform:uppercase;font-family:ui-monospace,monospace;color:var(--s500)}
+.dr-val{color:var(--s300);font-weight:500;margin:2px 0 8px}
+.dr-mono{color:var(--s400);font-size:11px;font-family:ui-monospace,monospace;margin-top:2px;word-break:break-word;background:rgba(15,23,42,.6);padding:6px;border-radius:4px;border:1px solid rgba(30,41,59,.8)}
+.fchip{font-size:11px;font-family:ui-monospace,monospace;color:var(--em3);background:rgba(2,44,34,.4);border:1px solid rgba(6,95,70,.6);padding:1px 6px;border-radius:4px;display:block;margin-top:4px}
+.sch-tbl{width:100%;font-size:10px;font-family:ui-monospace,monospace;border-collapse:collapse}
+.sch-tbl td{padding:3px;border-bottom:1px solid rgba(30,41,59,.6)}
+.sch-tbl tr:last-child td{border-bottom:none}
+.sch-n{color:var(--s300)}.sch-t{color:var(--in3);text-align:right}
+.dr-call{padding:8px;border-radius:4px;background:rgba(8,51,68,.4);border:1px solid rgba(21,94,117,.6);font-size:11px;color:#a5f3fc;margin-top:8px}
+.stage-card{background:var(--s950);border:1px solid var(--s800);border-radius:4px;padding:12px;font-size:12px;font-family:ui-monospace,monospace;margin-bottom:12px}
+.st-hd{display:flex;align-items:center;justify-content:space-between;padding-bottom:6px;border-bottom:1px solid var(--s800);margin-bottom:8px;flex-wrap:wrap;gap:6px}
+.st-name{font-weight:700;color:var(--cy3)}
+.st-badge{font-size:10px;padding:1px 6px;border-radius:4px;border:1px solid}
+.st-shuf{background:var(--ro95);color:var(--ro3);border-color:var(--ro8)}
+.st-pipe{background:var(--em95);color:var(--em3);border-color:var(--em8)}
+.op-chip{padding:1px 6px;border-radius:4px;background:var(--s900);color:var(--s300);border:1px solid var(--s800);font-size:10px;display:inline-block;margin:2px 4px 2px 0}
+.code-hd{background:var(--s950);padding:8px;border-bottom:1px solid var(--s800);font-size:12px;font-family:ui-monospace,monospace;color:var(--cy3);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px}
+.code-pre{flex:1;overflow:auto;padding:12px;font-family:ui-monospace,monospace;font-size:12px;color:var(--s300);background:rgba(2,6,23,.8);line-height:1.6;white-space:pre;-webkit-overflow-scrolling:touch}
+.rule-item{background:var(--s950);padding:10px;border-radius:4px;border:1px solid var(--s800);font-size:12px;font-family:ui-monospace,monospace;margin-bottom:8px}
+.empty-note{text-align:center;padding:48px 0;color:var(--s500);font-size:12px}
+/* volcano */
+.memo-item{padding:8px;border-radius:4px;border:1px solid;font-family:ui-monospace,monospace;display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px}
+.memo-win{background:rgba(2,44,34,.3);border-color:var(--em8);color:#a7f3d0}
+.memo-los{background:var(--s900);border-color:var(--s800);color:var(--s400);opacity:.6}
+/* ============ TELEMETRY ============ */
+.tel-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px}
+@media(min-width:640px){.tel-grid{grid-template-columns:repeat(3,1fr)}}
+@media(min-width:1024px){.tel-grid{grid-template-columns:repeat(4,1fr)}}
+.m-card{padding:8px;border-radius:4px;border:1px solid rgba(30,41,59,.8);background:rgba(2,6,23,.7)}
+.m-card.key{border-color:var(--s700);box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.m-lab{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--s400);margin-bottom:4px}
+.m-lab .u{font-size:10px;color:var(--s500);font-family:ui-monospace,monospace}
+.m-row{display:flex;align-items:baseline;justify-content:space-between}
+.m-val{font-size:15px;font-weight:700;font-family:ui-monospace,monospace;color:var(--cy3)}
+.m-delta{font-size:10px;font-family:ui-monospace,monospace;display:inline-flex;align-items:center}
+.m-desc{font-size:9px;color:var(--s500);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.an-card{padding:10px;border-radius:4px;border:1px solid;font-size:12px;display:flex;align-items:flex-start;gap:8px}
+.an-ok{background:rgba(2,44,34,.4);border-color:rgba(6,95,70,.7);color:var(--em3)}
+.an-warn{background:rgba(69,26,3,.4);border-color:rgba(146,64,14,.7);color:var(--am3)}
+.an-neu{background:var(--s950);border-color:var(--s800);color:var(--s300)}
+.an-t{font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px;display:block}
+.an-d{font-size:11px;line-height:1.5;color:var(--s300);opacity:.9}
+/* ============ TIMELINE ============ */
+.tl-card{padding:12px}
+.tl-scrub{position:relative;display:flex;align-items:center;justify-content:space-between;padding:8px 12px}
+.tl-track{position:absolute;left:12px;right:12px;top:50%;transform:translateY(-50%);height:4px;background:var(--s800);border-radius:2px;z-index:0}
+.tl-prog{position:absolute;left:12px;top:50%;transform:translateY(-50%);height:4px;background:var(--cy6);border-radius:2px;z-index:0;transition:width .3s}
+.tl-mark{position:relative;z-index:10;display:flex;flex-direction:column;align-items:center;outline:none}
+.tl-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,monospace;font-size:11px;font-weight:700;border:1px solid;transition:all .2s}
+.tl-cur .tl-dot{background:var(--cy5);border-color:#fff;color:var(--s950);transform:scale(1.1);box-shadow:0 4px 6px -1px rgba(8,51,68,.9),0 0 0 2px var(--cy4)}
+.tl-past .tl-dot{background:var(--s800);border-color:var(--cy8);color:var(--cy3)}
+.tl-fut .tl-dot{background:var(--s950);border-color:var(--s800);color:var(--s600)}
+.tl-lab{font-size:9px;font-family:ui-monospace,monospace;margin-top:4px;max-width:80px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--s500)}
+.tl-cur .tl-lab{color:var(--cy3);font-weight:700}
+.log-item{padding:8px;border-radius:4px;border:1px solid;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:space-between;gap:8px;font-family:ui-monospace,monospace;font-size:12px;margin-bottom:6px}
+.log-cur{background:rgba(8,51,68,.6);border-color:var(--cy6);color:#a5f3fc;font-weight:600}
+.log-nor{background:rgba(2,6,23,.6);border-color:rgba(30,41,59,.8);color:var(--s400)}
+.log-nor:hover{background:rgba(30,41,59,.6)}
+.log-l{display:flex;align-items:center;gap:8px;overflow:hidden;min-width:0}
+.log-ts{font-size:10px;color:var(--s500);flex-shrink:0}
+.log-step{font-size:10px;padding:1px 4px;border-radius:4px;background:var(--s800);color:var(--s300);border:1px solid var(--s700);flex-shrink:0}
+.log-tx{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--s200)}
+.log-r{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.log-ln{font-size:10px;color:var(--in4)}
+.log-scroll{max-height:176px;overflow:auto;padding-right:4px;-webkit-overflow-scrolling:touch}
+/* ============ INSPECTOR ============ */
+.insp{padding:12px}
+.depth-sw{display:flex;align-items:center;background:var(--s950);padding:2px;border-radius:4px;border:1px solid var(--s800);font-size:11px}
+.dep-btn{padding:2px 8px;border-radius:4px;color:var(--s400);transition:color .15s}
+.dep-btn:hover{color:var(--s200)}
+.dep-btn.act{background:var(--s800);color:var(--cy3);font-weight:500}
+.callout{background:rgba(2,6,23,.8);border:1px solid rgba(30,41,59,.8);padding:10px;border-radius:4px;margin-bottom:12px;font-size:12px;line-height:1.5;color:var(--s300)}
+.callout .cl{font-size:10px;font-family:ui-monospace,monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--cy4);font-weight:600;display:block;margin-bottom:4px}
+.insp-grid{display:grid;grid-template-columns:1fr;gap:12px;font-size:12px}
+@media(min-width:768px){.insp-grid{grid-template-columns:1fr 1fr}}
+.insp-sec{background:rgba(2,6,23,.6);padding:10px;border-radius:4px;border:1px solid rgba(30,41,59,.8)}
+.insp-t{display:flex;align-items:center;gap:6px;font-weight:600;color:var(--s300);margin-bottom:4px;font-size:12px}
+.insp-p{color:var(--s400);font-size:11px;line-height:1.5}
+.insp-p.mono{font-family:ui-monospace,monospace}
+/* ============ PARAMETERS ============ */
+.pr-card{padding:12px}
+.pr-item{background:rgba(2,6,23,.6);padding:8px;border-radius:4px;border:1px solid rgba(30,41,59,.8);margin-bottom:8px}
+.pr-lab{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:12px}
+.pr-name{font-weight:500;color:var(--s300);display:flex;align-items:center;gap:4px;cursor:pointer}
+.pr-val{font-family:ui-monospace,monospace;font-size:11px;padding:1px 6px;border-radius:4px;background:var(--s800);color:var(--cy3);border:1px solid var(--s700);white-space:nowrap}
+.pr-range{display:flex;align-items:center;gap:8px}
+.pr-min{font-size:10px;color:var(--s500);font-family:ui-monospace,monospace;flex-shrink:0}
+input[type=range]{flex:1;accent-color:var(--cy5);height:6px;cursor:pointer;-webkit-appearance:none;appearance:none;background:var(--s800);border-radius:4px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--cy4);cursor:pointer;border:none}
+.sw{position:relative;display:inline-flex;height:20px;width:36px;flex-shrink:0;cursor:pointer;border-radius:999px;border:2px solid transparent;transition:background .2s;outline:none}
+.sw.on{background:var(--cy6)}.sw.off{background:var(--s800)}
+.sw .knob{pointer-events:none;display:inline-block;height:16px;width:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.4);transition:transform .2s;transform:translateX(0)}
+.sw.on .knob{transform:translateX(16px)}
+.sw-note{font-size:11px;color:var(--s400)}
+.pr-sel{width:100%;margin-top:4px;background:var(--s900);border:1px solid var(--s700);color:var(--s200);border-radius:4px;padding:4px 8px;font-size:12px;outline:none}
+.pr-sel:focus{border-color:var(--cy5)}
+.pr-cat{font-size:10px;font-family:ui-monospace,monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--s500);font-weight:600;margin:12px 0 8px}
+.link-btn{color:var(--s400);font-size:11px;display:inline-flex;align-items:center;gap:4px;text-decoration:none}
+.link-btn:hover{color:var(--s200);text-decoration:underline}
+/* ============ MODALS ============ */
+.overlay{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.7);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;padding:16px}
+.modal{background:var(--s900);border:1px solid var(--s700);border-radius:12px;box-shadow:0 25px 50px -12px rgba(0,0,0,.6);max-width:768px;width:100%;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;color:var(--s200)}
+.m-hd{background:var(--s950);padding:12px 16px;border-bottom:1px solid var(--s800);display:flex;align-items:center;justify-content:space-between}
+.m-hdt{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px}
+.m-bd{flex:1;overflow:auto;padding:16px;font-size:12px;display:flex;flex-direction:column;gap:16px;-webkit-overflow-scrolling:touch}
+.m-ft{background:var(--s950);padding:10px 16px;border-top:1px solid var(--s800);display:flex;justify-content:flex-end}
+.sec-box{background:var(--s950);padding:12px;border-radius:8px;border:1px solid var(--s800)}
+.sec-lab{font-weight:600;color:var(--cy3);font-family:ui-monospace,monospace;font-size:11px;text-transform:uppercase;display:block;margin-bottom:4px}
+.sec-lab.ind{color:var(--in3)}.sec-lab.em{color:var(--em4)}
+.chain{display:flex;flex-wrap:wrap;align-items:center;gap:8px;color:var(--s300)}
+.chain-chip{padding:4px 8px;border-radius:4px;background:var(--s900);border:1px solid var(--s700);font-size:12px}
+.chain-chip.hl{background:var(--in95);color:#c7d2fe;border-color:var(--in7);font-weight:600}
+.cmp-tbl{width:100%;text-align:left;border-collapse:collapse}
+.cmp-tbl thead tr{background:rgba(2,6,23,.8);border-bottom:1px solid var(--s800);font-size:11px;color:var(--s400);font-family:ui-monospace,monospace}
+.cmp-tbl th{padding:10px}
+.cmp-tbl tbody{font-family:ui-monospace,monospace}
+.cmp-tbl tbody tr{border-top:1px solid var(--s800)}
+.cmp-tbl tbody tr:hover{background:rgba(2,6,23,.4)}
+.cmp-tbl td{padding:10px}
+.cmp-m{font-family:-apple-system,sans-serif}
+.cmp-m .n{font-weight:500;font-size:12px}
+.cmp-m .u{font-size:10px;color:var(--s500)}
+.cmp-b{color:var(--s300);text-align:right}
+.cmp-c{color:var(--cy3);font-weight:600;text-align:right}
+.cmp-v{text-align:right;font-family:ui-monospace,monospace}
+.cmp-s{text-align:center}
+.pill{padding:2px 6px;border-radius:4px;font-size:10px;display:inline-flex;align-items:center;justify-content:center;gap:4px;border:1px solid}
+.pill-unc{background:var(--s800);color:var(--s400);border-color:transparent}
+.pill-imp{background:var(--em95);color:var(--em3);border-color:var(--em8)}
+.pill-reg{background:var(--am95);color:var(--am3);border-color:#92400e}
+.doc-grid{display:grid;grid-template-columns:1fr;gap:8px;font-size:11px}
+@media(min-width:640px){.doc-grid{grid-template-columns:1fr 1fr}}
+.doc-cell{padding:8px;border-radius:4px;background:var(--s900);border:1px solid var(--s800)}
+.doc-cell b{display:block;margin-bottom:2px}
+.doc-cell p{color:var(--s400)}
+.doc-cell code{color:var(--s300);font-family:ui-monospace,monospace}
+.concept-li{display:flex;align-items:flex-start;gap:6px;color:var(--s300);margin-bottom:6px;font-size:12px}
+.fid-note{background:rgba(30,27,75,.3);border:1px solid rgba(55,48,163,.6);padding:12px;border-radius:4px;font-size:11px;color:var(--in3)}
+.btn-solid{padding:4px 12px;background:var(--cy6);color:var(--s950);font-weight:700;border-radius:4px;font-size:12px}
+.btn-solid:hover{background:var(--cy5)}
+.btn-dark{padding:4px 12px;background:var(--s800);color:var(--s200);border-radius:4px;font-size:12px}
+.btn-dark:hover{background:var(--s700)}
+.viz-empty{background:var(--s900);border:1px solid var(--s800);border-radius:4px;padding:24px;text-align:center;color:var(--s400)}
+#workstation-root{min-height:100vh;display:flex;flex-direction:column}
+</style>
+</head>
+<body>
+<div id="workstation-root">
+  <header id="hdr"></header>
+  <div id="deck"></div>
+  <div id="wb"></div>
+  <main id="main">
+    <div class="row-a">
+      <div class="viz-col" id="viz-col"><div id="viz-root"></div></div>
+      <div class="pr-col" id="pr-col" style="display:none"><div id="pr-root"></div></div>
+    </div>
+    <div id="tel-root"></div>
+    <div id="tl-root"></div>
+    <div id="insp-root"></div>
+  </main>
+</div>
+<div id="cmp-root"></div>
+<div id="docs-root"></div>
+
+<script>
+/* =====================================================================
+   ICONS (inline lucide-style SVG)
+===================================================================== */
+var ICONS = {
+cpu:'<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"/>',
+layers:'<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+code:'<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
+eye:'<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+book:'<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+gitcmp:'<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/>',
+term:'<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
+chevd:'<polyline points="6 9 12 15 18 9"/>',
+chevr:'<polyline points="9 18 15 12 9 6"/>',
+info:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+check2:'<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+check:'<polyline points="20 6 9 17 4 12"/>',
+flame:'<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
+play:'<polygon points="5 3 19 12 5 21 5 3"/>',
+pause:'<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
+skipb:'<polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/>',
+skipf:'<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/>',
+rccw:'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+spark:'<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>',
+zap:'<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+sett:'<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>',
+fsearch:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><circle cx="11" cy="15" r="2"/><path d="m12.5 16.5 1.5 1.5"/>',
+help:'<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+trup:'<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>',
+trdn:'<polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/>',
+sliders:'<line x1="21" y1="4" x2="14" y2="4"/><line x1="10" y1="4" x2="3" y2="4"/><line x1="21" y1="12" x2="12" y2="12"/><line x1="8" y1="12" x2="3" y2="12"/><line x1="21" y1="20" x2="16" y2="20"/><line x1="12" y1="20" x2="3" y2="20"/><line x1="14" y1="2" x2="14" y2="6"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="16" y1="18" x2="16" y2="22"/>',
+refcw:'<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+act:'<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+alert:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+atri:'<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+copy:'<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+arr:'<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
+playc:'<circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/>',
+edit3:'<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+lock:'<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+fcode:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="m10 13-2 2 2 2"/><path d="m14 17 2-2-2-2"/>',
+boxes:'<path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z"/><path d="m7 16.5-4.74-2.85"/><path d="m7 16.5 5-3"/><path d="M7 16.5v5.17"/><path d="M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z"/><path d="m17 16.5-5-3"/><path d="m17 16.5 4.74-2.85"/><path d="M17 16.5v5.17"/><path d="M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z"/><path d="M12 8 7.26 5.15"/><path d="m12 8 4.74-2.85"/><path d="M12 13.5V8"/>',
+db:'<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
+net:'<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>',
+search:'<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'
+};
+function icon(n,cls){return '<svg class="ic '+(cls||'s35')+'" viewBox="0 0 24 24" aria-hidden="true">'+(ICONS[n]||'')+'</svg>';}
+function esc(s){if(s==null)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function escA(s){return esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function fmt(n){return (typeof n==='number')?n.toLocaleString():n;}
+
+/* =====================================================================
+   SPARK CATALOG
+===================================================================== */
+var SPARK_CATALOG = {
+customers:{tableName:'customers',rowCount:250000,sizeBytes:8*1024*1024,fileFormat:'Parquet (Snappy)',location:'hdfs://lakehouse/data/gold/customers',schema:[
+ {name:'customer_id',dataType:'LongType',nullable:false},{name:'customer_name',dataType:'StringType',nullable:true},{name:'tier',dataType:'StringType',nullable:true},{name:'country',dataType:'StringType',nullable:true},{name:'signup_date',dataType:'DateType',nullable:true}]},
+orders:{tableName:'orders',rowCount:1250000,sizeBytes:450*1024*1024,fileFormat:'Parquet (Snappy)',location:'hdfs://lakehouse/data/gold/orders',schema:[
+ {name:'order_id',dataType:'LongType',nullable:false},{name:'customer_id',dataType:'LongType',nullable:false},{name:'product_id',dataType:'LongType',nullable:false},{name:'order_amount',dataType:'DecimalType(10,2)',nullable:false},{name:'order_date',dataType:'DateType',nullable:false},{name:'region',dataType:'StringType',nullable:true},{name:'status',dataType:'StringType',nullable:false},{name:'tax_rate',dataType:'DoubleType',nullable:true},{name:'quantity',dataType:'IntegerType',nullable:true}]},
+transactions:{tableName:'transactions',rowCount:2000000,sizeBytes:850*1024*1024,fileFormat:'Delta Lake',location:'s3a://fintech-lake/transactions',schema:[
+ {name:'transaction_id',dataType:'StringType',nullable:false},{name:'account_id',dataType:'StringType',nullable:false},{name:'amount',dataType:'DecimalType(12,2)',nullable:false},{name:'timestamp',dataType:'TimestampType',nullable:false},{name:'status',dataType:'StringType',nullable:false}]},
+accounts:{tableName:'accounts',rowCount:1500000,sizeBytes:120*1024*1024,fileFormat:'Delta Lake',location:'s3a://fintech-lake/accounts',schema:[
+ {name:'account_id',dataType:'StringType',nullable:false},{name:'account_type',dataType:'StringType',nullable:false},{name:'risk_score',dataType:'IntegerType',nullable:true},{name:'status',dataType:'StringType',nullable:false},{name:'balance',dataType:'DecimalType(12,2)',nullable:false}]},
+products:{tableName:'products',rowCount:80000,sizeBytes:4*1024*1024,fileFormat:'Parquet (Snappy)',location:'hdfs://lakehouse/data/gold/products',schema:[
+ {name:'product_id',dataType:'LongType',nullable:false},{name:'product_name',dataType:'StringType',nullable:false},{name:'category',dataType:'StringType',nullable:false},{name:'price',dataType:'DecimalType(8,2)',nullable:false},{name:'stock',dataType:'IntegerType',nullable:false}]}
+};
+
+/* =====================================================================
+   SQL PARSER (line-map based)
+===================================================================== */
+function parseSparkQuery(queryText){
+  var lines = queryText.split('\n');
+  var cleanLines = lines.map(function(l){return l.trim();});
+  if(!queryText.trim()){ return {error:'Empty query. Please provide a valid Spark SQL query or DataFrame operation.'}; }
+  var selectStart=-1,fromStart=-1,whereStart=-1,groupByStart=-1,havingStart=-1,orderByStart=-1;
+  for(var i=0;i<cleanLines.length;i++){
+    var line=cleanLines[i].toUpperCase();
+    if(line.indexOf('SELECT')===0)selectStart=i+1;
+    else if(line.indexOf('FROM')===0)fromStart=i+1;
+    else if(line.indexOf('WHERE')===0)whereStart=i+1;
+    else if(line.indexOf('GROUP BY')===0)groupByStart=i+1;
+    else if(line.indexOf('HAVING')===0)havingStart=i+1;
+    else if(line.indexOf('ORDER BY')===0)orderByStart=i+1;
+  }
+  if(selectStart===-1)return{error:'Syntax Error: Missing SELECT statement in query.'};
+  if(fromStart===-1)return{error:'Syntax Error: Missing FROM clause in query.'};
+  var fromLineIdx=fromStart-1;
+  var fromLineText=lines[fromLineIdx].replace(/--.*$/,'').trim();
+  var fromMatch=fromLineText.match(/FROM\s+([a-zA-Z0-9_]+)(?:\s+([a-zA-Z0-9_]+))?/i);
+  if(!fromMatch)return{error:'Invalid FROM clause at line '+fromStart+': Expected table identifier'};
+  var fromTable={name:fromMatch[1].toLowerCase(),alias:fromMatch[2]?fromMatch[2].toLowerCase():fromMatch[1].toLowerCase(),line:fromStart};
+  var joins=[],joinLines=[];
+  for(var j=0;j<lines.length;j++){
+    var rawLine=lines[j].replace(/--.*$/,'').trim();
+    var joinMatch=rawLine.match(/(?:(INNER|LEFT|RIGHT|FULL)\s+)?JOIN\s+([a-zA-Z0-9_]+)(?:\s+([a-zA-Z0-9_]+))?\s+ON\s+(.*)/i);
+    if(joinMatch){
+      joins.push({type:(joinMatch[1]?joinMatch[1].toUpperCase():'INNER'),table:joinMatch[2].toLowerCase(),alias:joinMatch[3]?joinMatch[3].toLowerCase():joinMatch[2].toLowerCase(),condition:joinMatch[4].trim(),line:j+1});
+      joinLines.push(j+1);
+    }
+  }
+  var whereClauses=[];
+  if(whereStart!==-1){
+    var k=whereStart-1;
+    var whereText=lines[k].replace(/--.*$/,'').replace(/WHERE/i,'').trim();
+    if(whereText)whereClauses.push({expression:whereText,line:k+1});
+    k++;
+    while(k<lines.length){
+      var l=lines[k].replace(/--.*$/,'').trim();
+      if(!l){k++;continue;}
+      var upper=l.toUpperCase();
+      if(upper.indexOf('GROUP BY')===0||upper.indexOf('ORDER BY')===0||upper.indexOf('HAVING')===0||upper.indexOf('LIMIT')===0)break;
+      if(upper.indexOf('AND ')===0||upper.indexOf('OR ')===0){whereClauses.push({expression:l.replace(/^(AND|OR)\s+/i,'').trim(),line:k+1});}
+      else if(l.indexOf('=')!==-1){whereClauses.push({expression:l,line:k+1});}
+      k++;
+    }
+  }
+  var selectColumns=[];
+  var curLine=selectStart;
+  while(curLine<=lines.length&&curLine!==fromStart){
+    var sl=lines[curLine-1].replace(/--.*$/,'').replace(/SELECT/i,'').trim();
+    if(sl){
+      var parts=sl.split(',');
+      for(var p=0;p<parts.length;p++){
+        var trimmed=parts[p].trim();
+        if(trimmed){
+          var aliasMatch=trimmed.match(/(.+)\s+AS\s+([a-zA-Z0-9_]+)/i);
+          if(aliasMatch)selectColumns.push({name:aliasMatch[1].trim(),alias:aliasMatch[2].trim(),line:curLine});
+          else selectColumns.push({name:trimmed,line:curLine});
+        }
+      }
+    }
+    curLine++;
+  }
+  return {parsed:{raw:queryText,selectColumns:selectColumns,fromTable:fromTable,joins:joins,whereClauses:whereClauses,groupByColumns:[],havingClauses:[],orderByColumns:[],
+    lineMap:{selectLine:selectStart,fromLine:fromStart,whereLine:whereStart!==-1?whereStart:fromStart,joinLines:joinLines,groupByLine:groupByStart!==-1?groupByStart:undefined,orderByLine:orderByStart!==-1?orderByStart:undefined}}};
+}
+function validateSparkQuery(queryText,validTables){
+  var res=parseSparkQuery(queryText);
+  if(res.error||!res.parsed)return{isValid:false,issues:[{message:res.error||'Failed to parse query',severity:'error'}]};
+  var parsed=res.parsed,issues=[];
+  if(validTables.indexOf(parsed.fromTable.name)===-1)
+    issues.push({line:parsed.fromTable.line,message:"Table '"+parsed.fromTable.name+"' not found in Spark Catalog. Available tables: "+validTables.join(', '),severity:'error'});
+  for(var q=0;q<parsed.joins.length;q++){
+    var jj=parsed.joins[q];
+    if(validTables.indexOf(jj.table)===-1)
+      issues.push({line:jj.line,message:"Joined table '"+jj.table+"' not found in Spark Catalog. Available tables: "+validTables.join(', '),severity:'error'});
+    if(!jj.condition)
+      issues.push({line:jj.line,message:"Join condition missing for table '"+jj.table+"'. Cross joins require explicit Cartesian product syntax.",severity:'warning'});
+  }
+  return {isValid:issues.filter(function(i){return i.severity==='error';}).length===0,issues:issues};
+}
+
+/* =====================================================================
+   JANINO WHOLE-STAGE CODEGEN
+===================================================================== */
+function generateJaninoJavaCode(config){
+  if(!config.wholeStageEnabled){
+    return '// Whole-Stage Code Generation is DISABLED (spark.sql.codegen.wholeStage = false)\n// Spark falls back to Volcano Iterator Model with virtual method invocation:\n//\n// while (child.hasNext()) {\n//     InternalRow row = child.next();\n//     if (filter.eval(row)) {\n//         return project.eval(row);\n//     }\n// }\n// ⚠️ High CPU cache misses and heavy virtual function call dispatch per row.';
+  }
+  var isBroadcast=config.joinType==='BroadcastHashJoin';
+  return '/* \n * Apache Spark Whole-Stage Java Code Generation (Janino Compiler)\n * Stage 1 / GeneratedIteratorForCodegenStage1\n * Project Tungsten: Zero virtual dispatch, unrolled CPU pipelining\n */\npackage org.apache.spark.sql.catalyst.expressions;\n\nimport org.apache.spark.sql.execution.BufferedRowIterator;\nimport org.apache.spark.sql.catalyst.InternalRow;\nimport org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;\nimport org.apache.spark.sql.execution.joins.LongHashedRelation;\n\npublic final class GeneratedIteratorForCodegenStage1 extends BufferedRowIterator {\n    private scala.collection.Iterator<InternalRow> inputScan;\n    '+(isBroadcast?'private LongHashedRelation broadcastRelation;':'')+'\n    private UnsafeRowWriter rowWriter;\n\n    public GeneratedIteratorForCodegenStage1(Object[] references) {\n        this.inputScan = (scala.collection.Iterator<InternalRow>) references[0];\n        '+(isBroadcast?'this.broadcastRelation = (LongHashedRelation) references[1];':'')+'\n        this.rowWriter = new UnsafeRowWriter(6, 64);\n    }\n\n    @Override\n    protected void processNext() throws java.io.IOException {\n        // Direct unrolled while loop over partition batches (no virtual next() calls)\n        while (inputScan.hasNext()) {\n            InternalRow scanRow = (InternalRow) inputScan.next();\n\n            '+(!config.filterPushedToScan&&config.hasFilter?'// In-Memory Filter evaluation\n            long amount = scanRow.getLong(3);\n            if (!(amount > 25000L)) {\n                continue; // Predicate rejected\n            }':'// [Filter Pushdown Active]: Predicate evaluated in Parquet Vectorized Reader')+'\n\n            '+(isBroadcast?'// Fast Broadcast Hash Table Probe (O(1) memory lookup)\n            long joinKey = scanRow.getLong(1);\n            InternalRow matchedBuildRow = broadcastRelation.getValue(joinKey);\n            if (matchedBuildRow == null) {\n                continue; // Inner join condition failed\n            }':'// Stream side record passed to downstream SortMergeJoin buffer')+'\n\n            // Materialize Tungsten UnsafeRow into off-heap memory buffer\n            rowWriter.reset();\n            rowWriter.write(0, scanRow.getLong(0));   // order_id\n            rowWriter.write(1, scanRow.getLong(1));   // customer_id\n            '+(isBroadcast?'rowWriter.write(2, matchedBuildRow.getUTF8String(1)); // customer_name':'')+'\n            \n            append(rowWriter.getRow());\n            if (shouldStop()) return;\n        }\n    }\n}';
+}
+
+/* =====================================================================
+   CATALYST PRESETS
+===================================================================== */
+var CATALYST_PRESETS=[
+{id:'preset_filter_pushdown_broadcast',name:'Filter Pushdown & Broadcast Join (Classic)',description:'Demonstrates pushdown of filter predicates into Parquet scan and conversion of large shuffle to BroadcastHashJoin.',
+code:"-- Scenario 1: E-Commerce Customer & Orders Analysis\n-- Target: Fast analytical join with selective filtering\nSELECT \n    c.customer_id,\n    c.customer_name,\n    c.tier,\n    o.order_id,\n    o.order_amount,\n    o.order_date\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nWHERE o.order_amount > 250.00\n  AND c.tier = 'PLATINUM'\n  AND o.order_date >= '2024-01-01'\nORDER BY o.order_amount DESC;",
+parameters:{autoBroadcastJoinThreshold:10,enableCBO:true,predicatePushdown:true,columnPruning:true,wholeStageCodegen:true,shufflePartitions:200,customersTableSizeMB:8,ordersTableSizeMB:450}},
+{id:'preset_sort_merge_join',name:'Large Dataset Sort-Merge Join (Shuffle Stages)',description:'When both tables exceed the broadcast threshold, Catalyst introduces ShuffleExchange and Sort operators.',
+code:"-- Scenario 2: Large Scale Financial Transactions Join\n-- Both tables exceed autoBroadcastJoinThreshold -> Triggers SortMergeJoin\nSELECT \n    t.transaction_id,\n    t.account_id,\n    t.amount,\n    a.account_type,\n    a.risk_score\nFROM transactions t\nJOIN accounts a ON t.account_id = a.account_id\nWHERE t.amount > 1000.00\n  AND a.status = 'ACTIVE';",
+parameters:{autoBroadcastJoinThreshold:10,enableCBO:true,predicatePushdown:true,columnPruning:true,wholeStageCodegen:true,shufflePartitions:200,customersTableSizeMB:120,ordersTableSizeMB:850}},
+{id:'preset_constant_folding',name:'Constant Folding & Expression Simplification',description:'Shows compile-time evaluation of constant arithmetic, static booleans, and branch elimination.',
+code:"-- Scenario 3: Expression Optimization & Dead Code Pruning\n-- Evaluates constant math and redundant conditions at plan-time\nSELECT \n    o.order_id,\n    o.order_amount * (1.0 - 0.15) AS discounted_amount,\n    o.order_date\nFROM orders o\nWHERE o.status = 'COMPLETED'\n  AND (100 * 24 * 60) > 10000\n  AND 1 = 1\n  AND (o.tax_rate + 0.05) > 0.10;",
+parameters:{autoBroadcastJoinThreshold:10,enableCBO:true,predicatePushdown:true,columnPruning:true,wholeStageCodegen:true,shufflePartitions:200,customersTableSizeMB:10,ordersTableSizeMB:300}},
+{id:'preset_aggregation_skew',name:'HashAggregate & Shuffle Partitions',description:'Illustrates two-phase aggregation (partial aggregate on mapper, final aggregate after shuffle exchange).',
+code:"-- Scenario 4: High-Cardinality Regional Sales Rollup\n-- Uses HashAggregate with map-side partial aggregation\nSELECT \n    o.region,\n    COUNT(o.order_id) AS total_orders,\n    SUM(o.order_amount) AS gross_revenue,\n    AVG(o.order_amount) AS avg_order_value\nFROM orders o\nWHERE o.order_date >= '2024-01-01'\nGROUP BY o.region\nHAVING SUM(o.order_amount) > 50000;",
+parameters:{autoBroadcastJoinThreshold:10,enableCBO:true,predicatePushdown:true,columnPruning:true,wholeStageCodegen:true,shufflePartitions:200,customersTableSizeMB:10,ordersTableSizeMB:500}},
+{id:'preset_three_way_join_cbo',name:'3-Way Join Reordering with CBO',description:'Cost-Based Optimizer utilizes table statistics and histograms to reorder join sequence for minimal intermediate volume.',
+code:"-- Scenario 5: Multi-table Order Fulfillment Pipeline\n-- CBO reorders joins: small table filtered first to minimize intermediate rows\nSELECT \n    c.customer_name,\n    p.product_name,\n    o.order_amount,\n    o.quantity\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nJOIN products p ON o.product_id = p.product_id\nWHERE c.country = 'USA'\n  AND p.category = 'Electronics';",
+parameters:{autoBroadcastJoinThreshold:10,enableCBO:true,predicatePushdown:true,columnPruning:true,wholeStageCodegen:true,shufflePartitions:200,customersTableSizeMB:12,ordersTableSizeMB:600}}
+];
+
+/* =====================================================================
+   CATALYST ENGINE — builds 6 deterministic snapshots
+===================================================================== */
+function buildCatalystSnapshots(parsed,params,mode){
+  var snapshots=[];
+  var table1Name=(parsed.fromTable.name in SPARK_CATALOG)?parsed.fromTable.name:'customers';
+  var table2Name=(parsed.joins[0]&&parsed.joins[0].table in SPARK_CATALOG)?parsed.joins[0].table:'orders';
+  var t1Meta=SPARK_CATALOG[table1Name]||SPARK_CATALOG['customers'];
+  var t2Meta=SPARK_CATALOG[table2Name]||SPARK_CATALOG['orders'];
+  var t1SizeMB=table1Name==='customers'?params.customersTableSizeMB:Math.round(t1Meta.sizeBytes/(1024*1024));
+  var t2SizeMB=table2Name==='orders'?params.ordersTableSizeMB:Math.round(t2Meta.sizeBytes/(1024*1024));
+  var minTableSizeMB=Math.min(t1SizeMB,t2SizeMB);
+  var canBroadcast=minTableSizeMB<=params.autoBroadcastJoinThreshold;
+  var joinType=canBroadcast?'BroadcastHashJoin':'SortMergeJoin';
+  var initialRowsTable1=t1Meta.rowCount;
+  var initialRowsTable2=t2Meta.rowCount;
+  var filteredRowsTable2=params.predicatePushdown?Math.round(initialRowsTable2*0.12):initialRowsTable2;
+  var selectCols=parsed.selectColumns.map(function(c){return c.name;}).join(', ');
+  var whereTxt=parsed.whereClauses.map(function(w){return w.expression;}).join(' AND ')||'o.order_amount > 250.00';
+  var joinCond=(parsed.joins[0]&&parsed.joins[0].condition)||'c.customer_id = o.customer_id';
+
+  /* ---------- STEP 0 ---------- */
+  var step0Root={id:'unresolved_project',type:'Project',name:'UnresolvedProject',title:'Project [unresolved]',details:'SELECT '+selectCols,outputColumns:parsed.selectColumns.map(function(c){return c.name;}),children:[
+    {id:'unresolved_filter',type:'Filter',name:'UnresolvedFilter',title:'Filter [unresolved]',details:whereTxt,children:[
+      {id:'unresolved_join',type:'Join',name:'UnresolvedJoin',title:'Join [unresolved]',details:'Inner Join on '+joinCond,children:[
+        {id:'unresolved_rel_1',type:'UnresolvedRelation',name:'UnresolvedRelation',title:'UnresolvedRelation ['+table1Name+']',details:'Table reference: '+table1Name+' (Catalog lookup required)',children:[]},
+        {id:'unresolved_rel_2',type:'UnresolvedRelation',name:'UnresolvedRelation',title:'UnresolvedRelation ['+table2Name+']',details:'Table reference: '+table2Name+' (Catalog lookup required)',children:[]}
+      ]}
+    ]}
+  ]};
+  var step0State={phase:'unresolved_logical',phaseIndex:0,totalPhases:5,rootNode:step0Root,stages:[],generatedCode:'// Java code generation occurs during Phase 5 (WholeStageCodegen)',ruleApplications:[],tableMetadata:(function(){var o={};o[table1Name]={tableName:t1Meta.tableName,rowCount:t1Meta.rowCount,sizeBytes:t1SizeMB*1024*1024,schema:t1Meta.schema,fileFormat:t1Meta.fileFormat,location:t1Meta.location};o[table2Name]={tableName:t2Meta.tableName,rowCount:t2Meta.rowCount,sizeBytes:t2SizeMB*1024*1024,schema:t2Meta.schema,fileFormat:t2Meta.fileFormat,location:t2Meta.location};return o;})(),
+    activeRule:{name:'SqlBaseParser (Antlr4)',description:'Parses raw SQL text into an Abstract Syntax Tree (AST) of Unresolved operators.',scalaRule:'org.apache.spark.sql.execution.SparkSqlParser',beforeSummary:'Raw SQL text received by SparkSession',afterSummary:'Tree of UnresolvedRelation and UnresolvedAttribute nodes'}};
+  snapshots.push({step:0,mode:mode,state:step0State,metrics:{planningTimeMs:1.2,projectedMemoryMB:t1SizeMB+t2SizeMB,shuffleVolumeMB:0,shuffleExchanges:0,scannedRows:initialRowsTable1+initialRowsTable2,appliedRulesCount:0,codegenLines:0,estimatedLatencyMs:1450},activeLine:parsed.lineMap.selectLine,
+    event:{id:'evt_0',step:0,timestamp:'00:00:01.012',type:'PARSING',label:'Query Parsed into AST',description:'Antlr4 parser generated Unresolved Logical Plan with placeholder relations and attributes.',sourceLine:parsed.lineMap.selectLine,phase:'Unresolved Logical Plan',impact:'neutral'},
+    explanation:{step:0,phase:'Phase 1: Parse & AST Generation',title:'Unresolved Logical Plan Created',
+      whatHappened:'The query was parsed from plain text into an abstract syntax tree composed of Unresolved Logical Plan nodes.',
+      whyItHappened:'Before Catalyst can optimize or execute a query, it must represent its relational algebra operations (Project, Filter, Join, Relation) as an in-memory tree data structure.',
+      underlyingMechanism:'Spark uses ANTLR4 grammar (SqlBase.g4) to tokenize keywords and build TreeNode objects. Attributes are wrapped in UnresolvedAttribute, and table names are placed in UnresolvedRelation because Spark does not yet know if the tables exist or what data types they hold.',
+      consequences:'No disk I/O or cluster communication has occurred. Schema, column types, and semantic validity remain completely unbound.',
+      depths:{beginner:'Spark read your SQL query and turned it into an outline of operations, but it has not checked if the tables or columns really exist yet.',technical:'Parsed tokens into an Abstract Syntax Tree of Catalyst TreeNode subclasses. Nodes hold string identifiers without schema binding or catalog resolution.',internals:'Antlr4 parser instantiated AstBuilder which visited grammar rules to produce LogicalPlan instances: Project(Filter(Join(UnresolvedRelation, UnresolvedRelation))). UnresolvedAttributes lack ExprId identifiers.'}}});
+
+  /* ---------- STEP 1 ---------- */
+  var step1Root={id:'analyzed_project',type:'Project',name:'Project',title:'Project [Resolved]',details:'c.customer_id#1L, c.customer_name#2, c.tier#3, o.order_id#10L, o.order_amount#13, o.order_date#14',
+    schema:[{name:'customer_id',dataType:'LongType'},{name:'customer_name',dataType:'StringType'},{name:'tier',dataType:'StringType'},{name:'order_id',dataType:'LongType'},{name:'order_amount',dataType:'DecimalType(10,2)'},{name:'order_date',dataType:'DateType'}],
+    children:[
+      {id:'analyzed_filter',type:'Filter',name:'Filter',title:'Filter [Resolved]',details:'o.order_amount#13 > 250.00 AND c.tier#3 = "PLATINUM"',children:[
+        {id:'analyzed_join',type:'Join',name:'Join',title:'Join [Resolved]',details:'Inner Join (c.customer_id#1L = o.customer_id#11L)',children:[
+          {id:'resolved_rel_1',type:'LogicalRelation',name:'LogicalRelation',title:'LogicalRelation ['+table1Name+']',details:'Catalog: gold.'+table1Name+' ('+t1Meta.fileFormat+')',schema:t1Meta.schema,children:[]},
+          {id:'resolved_rel_2',type:'LogicalRelation',name:'LogicalRelation',title:'LogicalRelation ['+table2Name+']',details:'Catalog: gold.'+table2Name+' ('+t2Meta.fileFormat+')',schema:t2Meta.schema,children:[]}
+        ]}
+      ]}
+    ]};
+  snapshots.push({step:1,mode:mode,state:Object.assign({},step0State,{phase:'analyzed_logical',phaseIndex:1,rootNode:step1Root,previousRootNode:step0Root,
+      ruleApplications:[{ruleName:'ResolveRelations',timeMs:14,affectedNode:'LogicalRelation',description:'Resolved table references against SessionCatalog'},{ruleName:'ResolveReferences',timeMs:11,affectedNode:'AttributeReference',description:'Bound column names to schema attribute IDs'}],
+      activeRule:{name:'Analyzer.ResolveRelations & ResolveReferences',description:'Binds catalog schema metadata and assigns unique Expression IDs.',scalaRule:'org.apache.spark.sql.catalyst.analysis.Analyzer',beforeSummary:'UnresolvedRelation("customers")',afterSummary:'LogicalRelation(customers, [customer_id#1L, ...])'}}),
+    metrics:{planningTimeMs:4.8,projectedMemoryMB:t1SizeMB+t2SizeMB,shuffleVolumeMB:0,shuffleExchanges:0,scannedRows:initialRowsTable1+initialRowsTable2,appliedRulesCount:4,codegenLines:0,estimatedLatencyMs:1420},
+    activeLine:parsed.lineMap.fromLine,
+    event:{id:'evt_1',step:1,timestamp:'00:00:01.048',type:'ANALYSIS',label:'Catalog Resolution & Type Binding',description:'Spark Metastore catalog lookup completed. Table schemas resolved and column data types verified.',sourceLine:parsed.lineMap.fromLine,phase:'Analyzed Logical Plan',impact:'neutral'},
+    explanation:{step:1,phase:'Phase 2: Analysis & Catalog Lookup',title:'Analyzed Logical Plan Resolved',
+      whatHappened:'The Analyzer resolved all table references against the Spark Metastore / SessionCatalog and assigned unique Expression IDs (#exprId) and data types to all attributes.',
+      whyItHappened:'Without knowing column data types and nullability, Spark cannot verify mathematical comparisons, type coercions, or validate whether a join condition is valid.',
+      underlyingMechanism:'The Analyzer executes a batch of rules using SessionCatalog. It matches UnresolvedRelation to physical tables/views, pulls table metadata, and transforms UnresolvedAttribute into AttributeReference bound to schema positions with verified datatypes.',
+      consequences:'Semantic correctness is guaranteed. If a column or table had been missing, Spark would fail here with an AnalysisException.',
+      depths:{beginner:'Spark checked its database catalog, confirmed the tables exist, and learned what kinds of data (numbers, dates, text) each column holds.',technical:'Analyzer applied ResolveRelations, ResolveReferences, and TypeCoercion batches. Assigned monotonically increasing integer Expression IDs (e.g. customer_id#1L).',internals:'Traversed plan with RuleExecutor[LogicalPlan]. Looked up Hive Metastore/In-Memory Catalog to instantiate LogicalRelation(HadoopFsRelation). Verified expression signatures and column existence.'}}});
+
+  /* ---------- STEP 2 ---------- */
+  var step2Root={id:'opt_project',type:'Project',name:'Project',title:'Project',details:'c.customer_id#1L, c.customer_name#2, o.order_id#10L, o.order_amount#13',children:[
+    {id:'opt_join',type:'Join',name:'Join',title:'Join [Pushed Filters]',details:'Inner Join (c.customer_id#1L = o.customer_id#11L)',isTransformed:true,transformationBadge:'Join Input Pruned',children:[
+      {id:'filter_c',type:'Filter',name:'Filter',title:'Filter (c.tier#3 = "PLATINUM")',details:'Pushed down: Filters customers BEFORE join',isTransformed:true,transformationBadge:'Pushed Filter',children:[
+        {id:'rel_c',type:'LogicalRelation',name:'LogicalRelation',title:'LogicalRelation ['+table1Name+']',details:'Scan '+table1Name,pushedFilters:['IsNotNull(customer_id)',"tier = 'PLATINUM'"],children:[]}
+      ]},
+      {id:'filter_o',type:'Filter',name:'Filter',title:'Filter (o.order_amount#13 > 250.00)',details:'Pushed down: Filters orders BEFORE join',isTransformed:true,transformationBadge:'Pushed Filter',children:[
+        {id:'rel_o',type:'LogicalRelation',name:'LogicalRelation',title:'LogicalRelation ['+table2Name+']',details:'Scan '+table2Name,pushedFilters:['IsNotNull(customer_id)','order_amount > 250.00',"order_date >= '2024-01-01'"],children:[]}
+      ]}
+    ]}
+  ]};
+  snapshots.push({step:2,mode:mode,state:Object.assign({},step0State,{phase:'optimized_logical',phaseIndex:2,rootNode:step2Root,previousRootNode:step1Root,
+      ruleApplications:[{ruleName:'PushDownPredicates',timeMs:8,affectedNode:'Filter / Scan',description:'Moved predicates below Join node'}],
+      activeRule:{name:'org.apache.spark.sql.catalyst.optimizer.PushDownPredicates',description:'Transforms Filter(condition, Join) into Join(Filter(left), Filter(right)).',scalaRule:'PushDownPredicates',beforeSummary:'Filter applied AFTER Join',afterSummary:'Filters pushed BEFORE Join directly into leaf scans'}}),
+    metrics:{planningTimeMs:8.5,projectedMemoryMB:params.predicatePushdown?Math.round(t1SizeMB*0.3+t2SizeMB*0.2):t1SizeMB+t2SizeMB,shuffleVolumeMB:0,shuffleExchanges:0,scannedRows:params.predicatePushdown?Math.round(initialRowsTable1*0.2)+filteredRowsTable2:initialRowsTable1+initialRowsTable2,appliedRulesCount:8,codegenLines:0,estimatedLatencyMs:params.predicatePushdown?680:1420},
+    activeLine:parsed.lineMap.whereLine,
+    event:{id:'evt_2',step:2,timestamp:'00:00:01.092',type:'OPTIMIZATION',label:'Rule Applied: PushDownPredicates',description:params.predicatePushdown?'Filter conditions pushed below Join into table scan operators, filtering rows before join processing.':'Predicate pushdown disabled via parameter flag.',sourceLine:parsed.lineMap.whereLine,phase:'Optimized Logical Plan',impact:'optimization'},
+    explanation:{step:2,phase:'Phase 3: Logical Optimization',title:'Rule: PushDownPredicates Applied',
+      whatHappened:params.predicatePushdown?'Catalyst pushed the WHERE filter predicates (order_amount > 250 and tier = "PLATINUM") through the Join operator directly onto the source table scans.':'Predicate pushdown was disabled by user configuration, forcing full table scans into the join.',
+      whyItHappened:'Filtering before a join drastically reduces the number of candidate tuples entering the join, avoiding wasteful CPU and memory costs.',
+      underlyingMechanism:'Catalyst\u2019s PushDownPredicates rule inspects the filter expression tree. Any predicate whose referenced attributes originate strictly from one side of the join is safely transformed down below the Join operator.',
+      consequences:'Reduces scanned records from '+((initialRowsTable1+initialRowsTable2).toLocaleString())+' down to '+(Math.round(initialRowsTable1*0.2)+filteredRowsTable2).toLocaleString()+' rows ('+Math.round((1-(filteredRowsTable2/initialRowsTable2))*100)+'% data reduction before join).',
+      depths:{beginner:'Instead of joining millions of rows and filtering afterwards, Spark filters the data right as it is read, throwing away 85% of irrelevant rows before joining.',technical:'RuleExecutor invoked PushDownPredicates. Predicates partitioned by deterministic attribute dependency. Pushed conjuncts to left/right branches of the Join.',internals:'Expression tree matched Filter(condition, Join(left, right, Inner, joinCond)). Condition split into deterministic conjuncts via splitConjunctivePredicates. Sub-expressions with expr.references.subsetOf(left.outputSet) moved to left child.'}}});
+
+  /* ---------- STEP 3 ---------- */
+  var step3Root=JSON.parse(JSON.stringify(step2Root));
+  step3Root.transformationBadge='Columns Pruned';
+  step3Root.children[0].children[0].children[0].details='Pushed Project: [customer_id#1L, customer_name#2, tier#3] (country, signup_date pruned)';
+  step3Root.children[0].children[1].children[0].details='Pushed Project: [order_id#10L, customer_id#11L, order_amount#13] (tax_rate, region pruned)';
+  snapshots.push({step:3,mode:mode,state:Object.assign({},step0State,{phase:'optimized_logical',phaseIndex:2,rootNode:step3Root,previousRootNode:step2Root,
+      ruleApplications:[{ruleName:'PushDownPredicates',timeMs:8,affectedNode:'Filter',description:'Moved filter below join'},{ruleName:'ColumnPruning',timeMs:6,affectedNode:'Project',description:'Eliminated 8 unneeded columns'},{ruleName:'ConstantFolding',timeMs:3,affectedNode:'Expression',description:'Pre-evaluated static mathematical operations'}],
+      activeRule:{name:'org.apache.spark.sql.catalyst.optimizer.ColumnPruning',description:'Eliminates unreferenced schema attributes from leaf storage scans.',scalaRule:'ColumnPruning',beforeSummary:'All 14 columns retained in scan schema',afterSummary:'Only 6 referenced columns requested from Parquet vectorized reader'}}),
+    metrics:{planningTimeMs:12.1,projectedMemoryMB:Math.round(t1SizeMB*0.2+t2SizeMB*0.15),shuffleVolumeMB:0,shuffleExchanges:0,scannedRows:params.predicatePushdown?Math.round(initialRowsTable1*0.2)+filteredRowsTable2:initialRowsTable1+initialRowsTable2,appliedRulesCount:14,codegenLines:0,estimatedLatencyMs:params.predicatePushdown?490:1100},
+    activeLine:parsed.lineMap.selectLine,
+    event:{id:'evt_3',step:3,timestamp:'00:00:01.120',type:'OPTIMIZATION',label:'Rule Applied: ColumnPruning & ConstantFolding',description:'Pruned 8 unused columns from disk readers and simplified constant arithmetic at plan time.',sourceLine:parsed.lineMap.selectLine,phase:'Optimized Logical Plan',impact:'cost_reduction'},
+    explanation:{step:3,phase:'Phase 3: Logical Optimization',title:'ColumnPruning & ConstantFolding Applied',
+      whatHappened:'Catalyst analyzed the downstream column dependencies and pruned unreferenced columns (country, signup_date, tax_rate, region) so they will not be read from disk.',
+      whyItHappened:'Parquet and ORC formats store data in column-oriented chunks. If a column is omitted from the scan projection, the storage engine completely skips reading its disk blocks.',
+      underlyingMechanism:'ColumnPruning traverses from root to leaf, collecting the references set of required attributes. Any attribute not in the required set is dropped from the scan output schema.',
+      consequences:'Disk I/O bandwidth reduced by ~55%. Memory footprint of deserialized rows halved.',
+      depths:{beginner:'Spark saw you only asked for 6 columns, so it told the storage engine to ignore the other columns on disk completely, saving disk speed and RAM.',technical:'RuleExecutor evaluated ColumnPruning. Attribute sets propagated bottom-up to prune LogicalRelation.output. Pruning instructions forwarded to FileSourceScanExec.',internals:'Invoked org.apache.spark.sql.catalyst.optimizer.ColumnPruning. Pruned attributes removed from HadoopFsRelation.dataSchema to generate requiredSchema.'}}});
+
+  /* ---------- STEP 4 ---------- */
+  var physicalJoinNode=canBroadcast?
+   {id:'broadcast_hash_join',type:'BroadcastHashJoin',name:'BroadcastHashJoinExec',title:'BroadcastHashJoin [BuildRight / BuildLeft]',
+    details:'Build Side: '+table1Name+' ('+t1SizeMB+' MB <= '+params.autoBroadcastJoinThreshold+' MB threshold) \u2192 No Network Shuffle required!',isTransformed:true,transformationBadge:'Broadcast Hash Join',children:[
+      {id:'scan_orders',type:'FileSourceScan',name:'FileSourceScanExec',title:'FileScan parquet '+table2Name,details:'Batched: true, PushedFilters: [IsNotNull, amount > 250], Rows: '+filteredRowsTable2.toLocaleString(),children:[]},
+      {id:'broadcast_exchange',type:'BroadcastExchange',name:'BroadcastExchangeExec',title:'BroadcastExchangeExec [HashedRelation]',details:'TorrentBroadcast of '+table1Name+' ('+t1SizeMB+' MB) to all worker nodes',children:[
+        {id:'scan_customers',type:'FileSourceScan',name:'FileSourceScanExec',title:'FileScan parquet '+table1Name,details:"PushedFilters: [tier = 'PLATINUM'], Rows: "+Math.round(initialRowsTable1*0.15).toLocaleString(),children:[]}
+      ]}
+    ]}
+   :{id:'sort_merge_join',type:'SortMergeJoin',name:'SortMergeJoinExec',title:'SortMergeJoinExec',
+    details:'Both tables exceed '+params.autoBroadcastJoinThreshold+' MB threshold ('+t1SizeMB+' MB & '+t2SizeMB+' MB) -> Requires Shuffle & Sort',isTransformed:true,transformationBadge:'SortMergeJoin (Shuffled)',children:[
+      {id:'sort_orders',type:'Sort',name:'SortExec',title:'SortExec [customer_id ASC]',details:'In-memory radix sort on join key before stream merge',children:[
+        {id:'shuffle_orders',type:'ShuffleExchange',name:'ShuffleExchangeExec',title:'ShuffleExchangeExec [hashpartitioning, '+params.shufflePartitions+' parts]',details:'Network shuffle of '+table2Name+' across '+params.shufflePartitions+' partitions',children:[
+          {id:'scan_orders_smj',type:'FileSourceScan',name:'FileSourceScanExec',title:'FileScan parquet '+table2Name,details:'PushedFilters: [order_amount > 250]',children:[]}
+        ]}
+      ]},
+      {id:'sort_cust',type:'Sort',name:'SortExec',title:'SortExec [customer_id ASC]',details:'In-memory sort on join key',children:[
+        {id:'shuffle_cust',type:'ShuffleExchange',name:'ShuffleExchangeExec',title:'ShuffleExchangeExec [hashpartitioning, '+params.shufflePartitions+' parts]',details:'Network shuffle of '+table1Name+' across '+params.shufflePartitions+' partitions',children:[
+          {id:'scan_cust_smj',type:'FileSourceScan',name:'FileSourceScanExec',title:'FileScan parquet '+table1Name,details:"PushedFilters: [tier = 'PLATINUM']",children:[]}
+        ]}
+      ]}
+    ]};
+  var step4Root={id:'physical_root',type:'Project',name:'ProjectExec',title:'ProjectExec [Tungsten UnsafeRow]',details:'Materializes projection columns into UnsafeRow format',children:[physicalJoinNode]};
+  var shuffleBytes=canBroadcast?0:Math.round((t1SizeMB+t2SizeMB)*0.85);
+  var shuffleCount=canBroadcast?0:2;
+  snapshots.push({step:4,mode:mode,state:Object.assign({},step0State,{phase:'physical_planning',phaseIndex:3,rootNode:step4Root,previousRootNode:step3Root,
+      ruleApplications:[{ruleName:'JoinSelection',timeMs:15,affectedNode:joinType,description:'Selected '+joinType+' based on threshold evaluation'},{ruleName:'EnsureRequirements',timeMs:9,affectedNode:canBroadcast?'BroadcastExchange':'ShuffleExchange',description:'Enforced distribution and partitioning invariants'}],
+      activeRule:{name:'org.apache.spark.sql.execution.SparkStrategies.JoinSelection',description:'Chooses physical join algorithm using data size statistics and hint directives.',scalaRule:'JoinSelection',beforeSummary:'Logical Join(Inner)',afterSummary:'Physical '+joinType+'Exec'}}),
+    metrics:{planningTimeMs:18.4,projectedMemoryMB:canBroadcast?Math.round(t1SizeMB*1.5+40):Math.round((t1SizeMB+t2SizeMB)*0.4+180),shuffleVolumeMB:shuffleBytes,shuffleExchanges:shuffleCount,scannedRows:params.predicatePushdown?Math.round(initialRowsTable1*0.2)+filteredRowsTable2:initialRowsTable1+initialRowsTable2,appliedRulesCount:22,codegenLines:0,estimatedLatencyMs:canBroadcast?290:840},
+    activeLine:(parsed.lineMap.joinLines&&parsed.lineMap.joinLines[0])||parsed.lineMap.fromLine,
+    event:{id:'evt_4',step:4,timestamp:'00:00:01.180',type:'PLANNING',label:canBroadcast?'Physical Plan: BroadcastHashJoin Selected':'Physical Plan: SortMergeJoin Selected',
+      description:canBroadcast?('Table size ('+minTableSizeMB+' MB) is <= threshold ('+params.autoBroadcastJoinThreshold+' MB). BroadcastHashJoin chosen, eliminating cluster shuffle!'):('Table size ('+minTableSizeMB+' MB) exceeds threshold ('+params.autoBroadcastJoinThreshold+' MB). SortMergeJoin chosen with '+params.shufflePartitions+' shuffle partitions.'),
+      sourceLine:(parsed.lineMap.joinLines&&parsed.lineMap.joinLines[0])||parsed.lineMap.fromLine,phase:'Physical Planning',impact:canBroadcast?'optimization':'warning'},
+    explanation:{step:4,phase:'Phase 4: Physical Planning & Cost Model',title:canBroadcast?'BroadcastHashJoin Strategy Selected':'SortMergeJoin Strategy Selected',
+      whatHappened:canBroadcast?("Catalyst selected BroadcastHashJoin because table '"+table1Name+"' estimated size ("+minTableSizeMB+" MB) is within the 'spark.sql.autoBroadcastJoinThreshold' ("+params.autoBroadcastJoinThreshold+" MB)."):("Catalyst selected SortMergeJoin because both tables ("+t1SizeMB+" MB & "+t2SizeMB+" MB) exceed the 'spark.sql.autoBroadcastJoinThreshold' ("+params.autoBroadcastJoinThreshold+" MB)."),
+      whyItHappened:'Physical planning converts logical relational operators into concrete algorithms that can run on distributed cluster executors.',
+      underlyingMechanism:'JoinSelection strategy examines table size statistics. If a table fits in driver memory, it is broadcast via TorrentBroadcast to all executors, allowing local hash table lookups without redistributing the larger table.',
+      consequences:canBroadcast?'Zero network shuffle for the large table! Low latency, minimal disk spilling, and fast O(1) hash lookups.':('Introduces 2 ShuffleExchange stages and full network partitioning across '+params.shufflePartitions+' partitions, increasing I/O and latency.'),
+      depths:{beginner:canBroadcast?'Because the customer table is small, Spark sends a copy of it to every machine, so no big data shuffling over the network is needed!':'Because both tables are large, Spark must shuffle all data across machines by customer ID and sort it before merging.',
+        technical:'JoinSelection strategy matched CanBroadcast. Selected '+joinType+'. '+(canBroadcast?'Added BroadcastExchangeExec with HashedRelation broadcast mode.':''),
+        internals:'Strategy matches on LogicalPlan nodes and produces candidate Seq[SparkPlan]. CBO cost evaluation selected '+joinType+'Exec based on table stats.'}}});
+
+  /* ---------- STEP 5 ---------- */
+  var javaCode=generateJaninoJavaCode({joinType:joinType,hasFilter:true,filterPushedToScan:params.predicatePushdown,columnsPruned:params.columnPruning,wholeStageEnabled:params.wholeStageCodegen,tableName1:table1Name,tableName2:table2Name});
+  var step5Root={id:'wholestage_wrapper',type:'WholeStageCodegen',name:params.wholeStageCodegen?'WholeStageCodegen (1)':'VolcanoIterator (No Codegen)',
+    title:params.wholeStageCodegen?'WholeStageCodegen [Stage 1 - Janino Compiled]':'Volcano Iterator Model (Codegen Disabled)',
+    details:params.wholeStageCodegen?'Project Tungsten: Inlined pipelined compiled directly to Java bytecode':'Standard iterator next() calls per row across operators',
+    isWholeStageCodegen:params.wholeStageCodegen,codegenStageId:1,children:[step4Root]};
+  var rddStages=canBroadcast?[
+    {stageId:0,name:'Stage 0: Broadcast ['+table1Name+']',operators:['FileSourceScan','Filter','BroadcastExchange'],partitions:4,parentStageIds:[],isShuffle:false,shuffleReadMB:0,shuffleWriteMB:0,status:'completed'},
+    {stageId:1,name:'Stage 1: Pipelined Scan, Join & Project ['+table2Name+']',operators:['FileSourceScan','Filter','BroadcastHashJoin','Project','WholeStageCodegen'],partitions:16,parentStageIds:[0],isShuffle:false,shuffleReadMB:0,shuffleWriteMB:0,status:'active'}
+  ]:[
+    {stageId:0,name:'Stage 0: Shuffle Map ['+table1Name+']',operators:['FileSourceScan','Filter','ShuffleExchange'],partitions:8,parentStageIds:[],isShuffle:true,shuffleReadMB:0,shuffleWriteMB:Math.round(t1SizeMB*0.7),status:'completed'},
+    {stageId:1,name:'Stage 1: Shuffle Map ['+table2Name+']',operators:['FileSourceScan','Filter','ShuffleExchange'],partitions:32,parentStageIds:[],isShuffle:true,shuffleReadMB:0,shuffleWriteMB:Math.round(t2SizeMB*0.6),status:'completed'},
+    {stageId:2,name:'Stage 2: SortMergeJoin & Output',operators:['Sort','SortMergeJoin','Project'],partitions:params.shufflePartitions,parentStageIds:[0,1],isShuffle:true,shuffleReadMB:Math.round((t1SizeMB+t2SizeMB)*0.65),shuffleWriteMB:0,status:'active'}
+  ];
+  var codegenLinesCount=params.wholeStageCodegen?javaCode.split('\n').length:0;
+  snapshots.push({step:5,mode:mode,state:Object.assign({},step0State,{phase:'codegen_execution',phaseIndex:4,rootNode:step5Root,previousRootNode:step4Root,stages:rddStages,generatedCode:javaCode,
+      ruleApplications:[{ruleName:'CollapseCodegenStages',timeMs:12,affectedNode:'WholeStageCodegen',description:'Grouped physical operators into compiled stage'},{ruleName:'JaninoCompilation',timeMs:24,affectedNode:'GeneratedIterator',description:'Compiled Java source directly to JVM bytecode'}],
+      activeRule:{name:'org.apache.spark.sql.execution.WholeStageCodegenExec',description:'Tungsten Whole-Stage Java code generation and execution stage compilation.',scalaRule:'CollapseCodegenStages',beforeSummary:'Individual physical operator instances with virtual next() loops',afterSummary:'Single compiled Java loop keeping data in CPU registers'}}),
+    metrics:{planningTimeMs:26.2,projectedMemoryMB:canBroadcast?Math.round(t1SizeMB*1.5+40):Math.round((t1SizeMB+t2SizeMB)*0.4+180),shuffleVolumeMB:shuffleBytes,shuffleExchanges:shuffleCount,scannedRows:params.predicatePushdown?Math.round(initialRowsTable1*0.2)+filteredRowsTable2:initialRowsTable1+initialRowsTable2,appliedRulesCount:28,codegenLines:codegenLinesCount,estimatedLatencyMs:canBroadcast?(params.wholeStageCodegen?190:380):(params.wholeStageCodegen?680:1240)},
+    activeLine:parsed.lineMap.selectLine,
+    event:{id:'evt_5',step:5,timestamp:'00:00:01.240',type:'CODEGEN',label:params.wholeStageCodegen?'Whole-Stage Code Generation Completed':'Volcano Execution Ready',
+      description:params.wholeStageCodegen?'Project Tungsten compiled physical operator pipeline into a single high-performance Java class via Janino.':'WholeStageCodegen is disabled; Spark will execute via Volcano next() iterator model.',sourceLine:parsed.lineMap.selectLine,phase:'WholeStageCodegen & Execution',impact:'optimization'},
+    explanation:{step:5,phase:'Phase 5: Whole-Stage Code Generation & DAG Execution',title:params.wholeStageCodegen?'WholeStageCodegen Executed (Tungsten Engine)':'Volcano Iterator Pipeline Ready',
+      whatHappened:params.wholeStageCodegen?'Catalyst collapsed the physical operator pipeline into a single Java class (GeneratedIteratorForCodegenStage1) and compiled it into JVM bytecode using the Janino in-memory compiler.':'Whole-stage code generation was disabled, causing Spark to evaluate operators row-by-row through traditional virtual method calls.',
+      whyItHappened:'In the Volcano iterator model, each row causes hundreds of virtual function dispatches (child.next()), stalling CPU instruction pipelines and causing frequent cache misses. Whole-Stage Codegen flattens everything into a tight while-loop that fits entirely in CPU registers.',
+      underlyingMechanism:'Physical operators implementing CodegenSupport generate fragments of Java code. CollapseCodegenStages groups adjacent supported operators into a WholeStageCodegenExec node, compiling the unified source via CodeGenerator.compile().',
+      consequences:params.wholeStageCodegen?'CPU efficiency increased by 3x-10x. Zero virtual dispatch overhead, cache-friendly off-heap UnsafeRow memory access.':'Execution will suffer from high JVM virtual dispatch overhead and poor CPU register utilization.',
+      depths:{beginner:'Spark synthesized custom Java code on the fly for your specific query, compiling it straight into machine bytecode for maximum speed.',
+        technical:'Operators merged under WholeStageCodegenExec. Synthesized code compiles via Janino and loads as BufferedRowIterator. UnsafeRowWriter buffers output off-heap.',
+        internals:'Generated source implements produce() and consume() patterns across CodegenSupport subclasses. Evaluated variables stored in Java local primitives to allow JIT register allocation.'}}});
+  return snapshots;
+}
+
+/* =====================================================================
+   TOPIC: SPARK CATALYST
+===================================================================== */
+var SPARK_CATALYST_TOPIC={
+ id:'spark_catalyst',name:'Apache Spark Catalyst Query Optimizer',shortName:'Spark Catalyst',category:'Query Compilation & Distributed Engines',
+ description:'Deep interactive simulation of Apache Spark\u2019s Catalyst query execution engine: AST parsing, Catalog analysis, rule-based logical optimization, physical planning (Broadcast vs Sort-Merge join), and Whole-Stage Java bytecode generation.',
+ inputLanguage:'sql',defaultCode:CATALYST_PRESETS[0].code,presets:CATALYST_PRESETS,
+ parameters:[
+  {id:'autoBroadcastJoinThreshold',label:'Broadcast Join Threshold',type:'range',defaultValue:10,min:0,max:50,step:1,unit:'MB',description:'spark.sql.autoBroadcastJoinThreshold: Configures the maximum size in MB for a table that will be broadcast to all worker nodes. Setting to 0 disables broadcast and forces SortMergeJoin.',category:'Physical Planning'},
+  {id:'enableCBO',label:'Cost-Based Optimizer (CBO)',type:'boolean',defaultValue:true,description:'spark.sql.cbo.enabled: Enables table statistics collection, column histograms, and dynamic join reordering.',category:'Cost Model'},
+  {id:'predicatePushdown',label:'Predicate Pushdown',type:'boolean',defaultValue:true,description:'spark.sql.optimizer.predicatePushdown: Pushes filter conditions below joins directly into the storage scan (Parquet/Delta).',category:'Logical Rules'},
+  {id:'columnPruning',label:'Column Pruning',type:'boolean',defaultValue:true,description:'spark.sql.optimizer.columnPruning: Eliminates unreferenced columns from scan schemas to prevent reading unused data blocks.',category:'Logical Rules'},
+  {id:'wholeStageCodegen',label:'Whole-Stage Code Generation',type:'boolean',defaultValue:true,description:'spark.sql.codegen.wholeStage: Synthesizes a unified Java class compiled via Janino, eliminating virtual method invocations and running inside CPU registers.',category:'Runtime / Tungsten'},
+  {id:'shufflePartitions',label:'Shuffle Partitions',type:'select',defaultValue:200,options:[{label:'5 Partitions (Development)',value:5},{label:'200 Partitions (Default Spark)',value:200},{label:'500 Partitions (High Scale)',value:500}],description:'spark.sql.shuffle.partitions: Number of partitions to use when shuffling data for joins or aggregations.',category:'Physical Planning'},
+  {id:'customersTableSizeMB',label:'Customers Table Size',type:'range',defaultValue:8,min:1,max:50,step:1,unit:'MB',description:'Simulated data size of the customers table. Adjusting above the broadcast threshold triggers SortMergeJoin.',category:'Data Sizing'},
+  {id:'ordersTableSizeMB',label:'Orders Table Size',type:'range',defaultValue:450,min:50,max:1000,step:25,unit:'MB',description:'Simulated data size of the orders fact table.',category:'Data Sizing'}
+ ],
+ metrics:[
+  {id:'estimatedLatencyMs',label:'Est. Query Latency',unit:'ms',format:'duration',description:'Estimated end-to-end execution time on a 16-core Spark cluster.',isKeyMetric:true},
+  {id:'shuffleVolumeMB',label:'Shuffle Read/Write',unit:'MB',format:'bytes',description:'Total data redistributed across worker network interfaces.',isKeyMetric:true},
+  {id:'shuffleExchanges',label:'Network Shuffle Stages',unit:'stages',format:'count',description:'Number of ShuffleExchangeExec boundary operators introduced into the physical plan.',isKeyMetric:true},
+  {id:'scannedRows',label:'Scanned Rows',format:'number',description:'Total rows read from underlying storage after predicate pushdown evaluation.'},
+  {id:'projectedMemoryMB',label:'Peak Working Memory',unit:'MB',format:'bytes',description:'Peak memory occupied by broadcast hash tables, sort buffers, and Tungsten unsafe rows.'},
+  {id:'appliedRulesCount',label:'Rules Evaluated',format:'count',description:'Number of pattern-matching transformation rules executed by Catalyst RuleExecutor.'},
+  {id:'codegenLines',label:'Generated Java Lines',format:'count',description:'Lines of synthesized Janino Java code in the active WholeStageCodegen stage.'},
+  {id:'planningTimeMs',label:'Catalyst Planning Time',unit:'ms',format:'duration',description:'CPU time spent by driver traversing and optimizing the query tree.'}
+ ],
+ docs:{
+  overview:'Apache Spark Catalyst is an extensible query optimization framework built on Scala functional programming. It transforms relational queries into highly optimized physical execution code through four consecutive phases: Analysis, Logical Optimization, Physical Planning, and Code Generation.',
+  inputs:'Accepts Spark SQL queries or DataFrame operational chains. You can customize table references, predicates, joins, and tune configuration parameters such as autoBroadcastJoinThreshold and wholeStageCodegen.',
+  executionModel:'Catalyst represents queries as abstract syntax trees (ASTs) of TreeNode subclasses. A RuleExecutor applies batches of transformation rules using pattern matching until a fixed-point (idempotence) is reached.',
+  importantConcepts:[
+   'Unresolved vs Resolved Plan: Attributes and relations lack types and identities until resolved against the SessionCatalog.',
+   'Rule-Based Optimization (RBO): Applies deterministic transformation rules such as PushDownPredicate, ColumnPruning, ConstantFolding, and NullPropagation.',
+   'Cost-Based Optimization (CBO): Uses table and column statistics to reorder joins and calculate physical operator costs.',
+   'BroadcastHashJoin vs SortMergeJoin: Small tables (<= threshold) are broadcast to bypass expensive network shuffles entirely.',
+   'Project Tungsten & WholeStageCodegen: Janino in-memory compiler synthesizes custom Java bytecode, eliminating JVM virtual function calls and keeping variables in CPU registers.'
+  ],
+  performanceImplications:'Enabling Predicate Pushdown skips irrelevant Parquet blocks at the disk level. Proper broadcast thresholds prevent gigabytes of shuffle network saturation and expensive disk spills.',
+  simulationNotes:'This simulator faithfully models the four architectural phases, rule applications, physical strategy choices, RDD stage DAGs, and synthesized Janino Java bytecode of Apache Spark 3.x.'
+ },
+ parse:function(input){var r=parseSparkQuery(input);return{ast:r.parsed,error:r.error};},
+ validate:function(input){return validateSparkQuery(input,Object.keys(SPARK_CATALOG));},
+ buildExecutionPlan:function(input,params){
+   var r=parseSparkQuery(input);
+   var safeParsed=r.parsed||parseSparkQuery(CATALYST_PRESETS[0].code).parsed;
+   var engineParams={
+     autoBroadcastJoinThreshold:params.autoBroadcastJoinThreshold!=null?params.autoBroadcastJoinThreshold:10,
+     enableCBO:params.enableCBO!=null?params.enableCBO:true,
+     predicatePushdown:params.predicatePushdown!=null?params.predicatePushdown:true,
+     columnPruning:params.columnPruning!=null?params.columnPruning:true,
+     wholeStageCodegen:params.wholeStageCodegen!=null?params.wholeStageCodegen:true,
+     shufflePartitions:params.shufflePartitions!=null?params.shufflePartitions:200,
+     customersTableSizeMB:params.customersTableSizeMB!=null?params.customersTableSizeMB:8,
+     ordersTableSizeMB:params.ordersTableSizeMB!=null?params.ordersTableSizeMB:450};
+   var steps=buildCatalystSnapshots(safeParsed,engineParams,'DEFAULT');
+   return{steps:steps,totalSteps:steps.length};
+ }
+};
+
+/* =====================================================================
+   TOPIC: VOLCANO / CASCades CBO
+===================================================================== */
+var VOLCANO_OPTIMIZER_TOPIC={
+ id:'volcano_optimizer',name:'Volcano / System R Cost-Based Optimizer',shortName:'Volcano CBO',category:'Relational Database Internals',
+ description:'Explores dynamic programming memoization, cost search space exploration, index scan vs sequential scan, and nested loop vs hash join decisions in traditional RDBMS engines.',
+ inputLanguage:'sql',
+ defaultCode:'SELECT e.name, d.department_name, e.salary\nFROM employees e\nJOIN departments d ON e.dept_id = d.id\nWHERE e.salary > 75000 AND d.budget > 500000;',
+ presets:[
+  {id:'volcano_index_vs_seq',name:'Index Scan vs Full Table Scan',description:'Demonstrates when the optimizer flips from B-Tree index lookup to sequential scan based on selectivity.',code:'SELECT * FROM users WHERE age > 25 AND country = \'CA\';',parameters:{indexSelectivityPct:15,tableTotalPages:5000}},
+  {id:'volcano_join_strategy',name:'Hash Join vs Nested Loop',description:'Compares nested loop join vs in-memory hash join based on buffer pool capacity.',code:'SELECT * FROM orders o JOIN lineitems l ON o.id = l.order_id;',parameters:{bufferPoolMB:64,joinMethod:'HashJoin'}}
+ ],
+ parameters:[
+  {id:'indexSelectivityPct',label:'Predicate Selectivity (%)',type:'range',defaultValue:15,min:1,max:100,step:1,unit:'%',description:'Percentage of table rows matching the query condition. Low selectivity favors index scan; high selectivity favors sequential scan.'},
+  {id:'bufferPoolMB',label:'Database Buffer Pool',type:'range',defaultValue:64,min:16,max:512,step:16,unit:'MB',description:'Dedicated RAM for shared table buffers and hash join work areas.'},
+  {id:'enableIndexScan',label:'Enable Index Scans',type:'boolean',defaultValue:true,description:'Allow query optimizer to pick B-tree indexes if cost is lower.'}
+ ],
+ metrics:[
+  {id:'totalCost',label:'Optimizer Total Cost',format:'number',isKeyMetric:true},
+  {id:'ioReads',label:'Disk Block I/O Reads',format:'count',isKeyMetric:true},
+  {id:'memoryUsedMB',label:'Buffer Cache Used',unit:'MB',format:'bytes'},
+  {id:'exploredPlans',label:'Memo Search Space',format:'count'}
+ ],
+ docs:{
+  overview:'The Volcano/Cascades framework (and System R) evaluates queries through goal-driven search and memoization. It explores candidate physical plans, computes cost models based on I/O and CPU, and picks the global minimum.',
+  inputs:'SQL relational query with tunable buffer cache, selectivity, and access method flags.',
+  executionModel:'Dynamic programming memo table partitions operators into equivalence groups, generating candidate implementations and pruning unviable sub-plans.',
+  importantConcepts:['Memo Equivalence Groups','B-Tree Index Clustering','Cost Function: I/O Cost + CPU Weight * Tuples'],
+  performanceImplications:'Incorrect statistics cause the optimizer to select catastrophic nested loop joins or random I/O index scans on large data fractions.',
+  simulationNotes:'Educational model demonstrating Volcano cost estimation and equivalence group memo expansion.'
+ },
+ parse:function(input){return{ast:{text:input}};},
+ validate:function(input){return{isValid:input.trim().length>0,issues:input.trim().length>0?[]:[{message:'Input cannot be empty',severity:'error'}]};},
+ buildExecutionPlan:function(input,params){
+   var selectivity=params.indexSelectivityPct!=null?params.indexSelectivityPct:15;
+   var isIndexFavored=selectivity<20&&(params.enableIndexScan!=null?params.enableIndexScan:true);
+   var chosenAccess=isIndexFavored?'IndexScan (B-Tree on dept_id)':'SeqScan (Heap scan)';
+   var cost=isIndexFavored?Math.round(selectivity*28+120):Math.round(520+selectivity*8);
+   var steps=[
+    {step:0,mode:'DEFAULT',state:{phase:'Parsing',selectedPlan:'Initial Relational Algebra Tree',memoTable:[],activeOperation:'Parse SQL text into Relational Operators'},
+     metrics:{totalCost:0,ioReads:0,memoryUsedMB:4,exploredPlans:1},activeLine:1,
+     event:{id:'v_0',step:0,timestamp:'00:00:00.100',type:'PARSE',label:'Relational Expression Parsed',description:'SQL statement parsed into relational operators (Project, Filter, Join, Scan).'},
+     explanation:{step:0,phase:'Parsing & Normalization',title:'Relational Expression Initialized',whatHappened:'Created initial logical operator tree.',whyItHappened:'Volcano requires an initial relational representation before applying equivalence transformations.',underlyingMechanism:'Lexical parsing generates a logical operator tree: Project(Join(Scan, Scan)).',consequences:'Plan is ready for memo table insertion.'}},
+    {step:1,mode:'DEFAULT',state:{phase:'LogicalTree',selectedPlan:'Memo Group 0: Project, Group 1: Join, Group 2: Scan',
+      memoTable:[{group:'Group 0',operator:'LogicalProject',cost:10,isWinner:true},{group:'Group 1',operator:'LogicalJoin',cost:340,isWinner:true},{group:'Group 2',operator:'LogicalScan(employees)',cost:180,isWinner:true}],
+      activeOperation:'Populate Memo Equivalence Groups'},
+     metrics:{totalCost:530,ioReads:210,memoryUsedMB:12,exploredPlans:6},activeLine:2,
+     event:{id:'v_1',step:1,timestamp:'00:00:00.220',type:'MEMO_EXPANSION',label:'Memo Table Populated',description:'Constructed equivalence classes and registered rule transformations.'},
+     explanation:{step:1,phase:'Search Space Expansion',title:'Equivalence Groups Built',whatHappened:'Sub-plans grouped into equivalence classes to prevent redundant re-computation.',whyItHappened:'Without dynamic programming memoization, join order exploration produces exponential O(N!) complexity.',underlyingMechanism:'Cascades memo structures organize equivalent logical plans into Groups with shared properties.',consequences:'Enables top-down branch-and-bound cost pruning.'}},
+    {step:2,mode:'DEFAULT',state:{phase:'CostEstimation',selectedPlan:'Candidate Access Path Evaluation: '+chosenAccess,
+      memoTable:[
+       {group:'Group 2',operator:'SeqScan(employees)',cost:580,isWinner:!isIndexFavored},
+       {group:'Group 2',operator:'IndexScan(employees_dept_idx)',cost:Math.round(selectivity*28+120),isWinner:isIndexFavored},
+       {group:'Group 1',operator:'HashJoin',cost:420,isWinner:true},
+       {group:'Group 1',operator:'NestedLoopJoin',cost:1850,isWinner:false}],
+      activeOperation:'Evaluate Cost Model for Access Methods (Selectivity: '+selectivity+')'},
+     metrics:{totalCost:cost,ioReads:isIndexFavored?140:580,memoryUsedMB:32,exploredPlans:14},activeLine:4,
+     event:{id:'v_2',step:2,timestamp:'00:00:00.410',type:'COST_EVAL',label:isIndexFavored?'Index Scan Selected by Cost Model':'Sequential Scan Selected (High Selectivity)',
+      description:isIndexFavored?('Selectivity ('+selectivity+'%) is low. Index scan cost ('+cost+') beats sequential scan.'):('Selectivity ('+selectivity+'%) is high. Sequential scan chosen to avoid random disk seeks.')},
+     explanation:{step:2,phase:'Physical Strategy Selection',title:chosenAccess+' Chosen',whatHappened:'Cost model evaluated access paths and selected '+chosenAccess+'.',
+      whyItHappened:isIndexFavored?'Predicate matches a small percentage of rows; fetching index leaf pages plus clustered heap blocks is cheaper.':'At higher selectivities, random I/O seeks across index leaves degrade performance below contiguous sequential reads.',
+      underlyingMechanism:'Cost formula: Cost = (DiskPagesRead * 1.0) + (TuplesScanned * 0.01) + (RandomSeekPenalty * 4.0).',
+      consequences:'Estimated physical execution cost locked in at '+cost+' units.'}},
+    {step:3,mode:'DEFAULT',state:{phase:'Execution',selectedPlan:'Physical Plan: HashJoin -> '+chosenAccess,
+      memoTable:[
+       {group:'Group 0',operator:'PhysicalProject',cost:10,isWinner:true},
+       {group:'Group 1',operator:'HashJoin',cost:280,isWinner:true},
+       {group:'Group 2',operator:chosenAccess,cost:cost,isWinner:true}],
+      activeOperation:'Iterator Execution Pipeline Ready'},
+     metrics:{totalCost:cost+290,ioReads:isIndexFavored?160:610,memoryUsedMB:48,exploredPlans:14},activeLine:1,
+     event:{id:'v_3',step:3,timestamp:'00:00:00.600',type:'PLAN_FINALIZED',label:'Physical Query Plan Finalized',description:'Volcano query execution engine loaded physical iterator tree.'},
+     explanation:{step:3,phase:'Execution Pipeline',title:'Physical Plan Ready',whatHappened:'Best plan selected from memo table and instantiated into physical operator iterator tree.',whyItHappened:'The query optimization phase concluded with the lowest-cost physical execution tree.',underlyingMechanism:'Engine initializes root operator iterator. Downstream open(), next(), and close() methods are invoked.',consequences:'Query engine executes execution pipeline.'}}
+   ];
+   return{steps:steps,totalSteps:steps.length};
+ }
+};
+
+var SIMULATION_TOPICS=[SPARK_CATALYST_TOPIC,VOLCANO_OPTIMIZER_TOPIC];
+function getTopicById(id){for(var i=0;i<SIMULATION_TOPICS.length;i++)if(SIMULATION_TOPICS[i].id===id)return SIMULATION_TOPICS[i];return SPARK_CATALYST_TOPIC;}
+
+/* =====================================================================
+   STATE
+===================================================================== */
+var S={
+ activeTopic:null,activePreset:null,benchmarkCode:'',editCode:'',
+ validationResult:{isValid:true,issues:[]},paramValues:{},
+ activeView:'split',explanationDepth:'technical',
+ isParamsOpen:false,isDocsOpen:false,isComparisonOpen:false,
+ mode:'DEFAULT',status:'idle',currentStep:0,playbackSpeed:1,
+ snapshots:[],benchmarkSnapshots:[],
+ topicDD:false,presetDD:false,timelineView:'timeline',catalystTab:'tree',selectedNode:null,copiedBenchmark:false,
+ _taSel:null
+};
+var playTimer=null;
+function activeSnapshot(){return S.snapshots[S.currentStep]||S.snapshots[0];}
+function previousSnapshot(){return S.currentStep>0?S.snapshots[S.currentStep-1]:undefined;}
+
+/* =====================================================================
+   HANDLERS (mirror React App logic)
+===================================================================== */
+function selectTopic(topicId){
+  var t=getTopicById(topicId);
+  S.activeTopic=t;
+  var firstPreset=t.presets[0];
+  S.activePreset=firstPreset;
+  S.benchmarkCode=firstPreset?firstPreset.code:t.defaultCode;
+  S.editCode=firstPreset?firstPreset.code:t.defaultCode;
+  var initialParams={};
+  t.parameters.forEach(function(p){initialParams[p.id]=(firstPreset&&firstPreset.parameters&&firstPreset.parameters[p.id]!=null)?firstPreset.parameters[p.id]:p.defaultValue;});
+  S.paramValues=initialParams;
+  var plan=t.buildExecutionPlan(firstPreset?firstPreset.code:t.defaultCode,initialParams);
+  S.snapshots=plan.steps;S.benchmarkSnapshots=plan.steps;
+  S.currentStep=0;S.mode='DEFAULT';S.status='idle';
+  S.topicDD=false;S.presetDD=false;S.selectedNode=null;S.catalystTab='tree';
+  S.validationResult={isValid:true,issues:[]};
+  syncTimer();renderAll();
+}
+function selectPreset(id){
+  var preset=null;
+  for(var i=0;i<S.activeTopic.presets.length;i++)if(S.activeTopic.presets[i].id===id)preset=S.activeTopic.presets[i];
+  if(!preset)return;
+  S.activePreset=preset;S.benchmarkCode=preset.code;S.editCode=preset.code;
+  var newParams=Object.assign({},S.paramValues,preset.parameters||{});
+  S.paramValues=newParams;
+  var plan=S.activeTopic.buildExecutionPlan(preset.code,newParams);
+  S.snapshots=plan.steps;S.benchmarkSnapshots=plan.steps;
+  S.currentStep=0;S.mode='DEFAULT';S.status='idle';
+  S.presetDD=false;S.selectedNode=null;
+  S.validationResult={isValid:true,issues:[]};
+  syncTimer();renderAll();
+}
+function onParamInput(id,val){
+  var num=Number(val);S.paramValues[id]=isNaN(num)?val:num;
+  var b=document.querySelector('[data-badge="'+id+'"]');
+  if(b)b.innerHTML=paramBadgeText(id);
+  rebuildAfterParamChange();
+}
+function onParamToggle(id){
+  S.paramValues[id]=!S.paramValues[id];
+  var b=document.querySelector('[data-badge="'+id+'"]');
+  if(b)b.innerHTML=paramBadgeText(id);
+  var sw=document.querySelector('[data-sw="'+id+'"]');
+  if(sw){sw.className='sw '+(S.paramValues[id]?'on':'off');sw.querySelector('.knob').style.transform=S.paramValues[id]?'translateX(16px)':'translateX(0)';}
+  var note=document.querySelector('[data-swnote="'+id+'"]');
+  if(note)note.textContent=S.paramValues[id]?'Active in Catalyst planner':'Bypassed in planner';
+  rebuildAfterParamChange();
+}
+function paramBadgeText(id){
+  var p=null;for(var i=0;i<S.activeTopic.parameters.length;i++)if(S.activeTopic.parameters[i].id===id)p=S.activeTopic.parameters[i];
+  var v=S.paramValues[id]!=null?S.paramValues[id]:(p?p.defaultValue:'');
+  if(typeof v==='boolean')return v?'ENABLED':'DISABLED';
+  return esc(''+v+(p&&p.unit?' '+p.unit:''));
+}
+function rebuildAfterParamChange(){
+  var currentCode=S.mode==='CUSTOM'?S.editCode:S.benchmarkCode;
+  var plan=S.activeTopic.buildExecutionPlan(currentCode,S.paramValues);
+  S.snapshots=plan.steps;
+  if(S.mode==='DEFAULT')S.benchmarkSnapshots=plan.steps;
+  if(S.currentStep>=S.snapshots.length)S.currentStep=0;
+  S.selectedNode=null;
+  renderDynamic();
+}
+function resetParams(){
+  var initialParams={};
+  S.activeTopic.parameters.forEach(function(p){initialParams[p.id]=(S.activePreset&&S.activePreset.parameters&&S.activePreset.parameters[p.id]!=null)?S.activePreset.parameters[p.id]:p.defaultValue;});
+  S.paramValues=initialParams;
+  var currentCode=S.mode==='CUSTOM'?S.editCode:S.benchmarkCode;
+  var plan=S.activeTopic.buildExecutionPlan(currentCode,initialParams);
+  S.snapshots=plan.steps;
+  S.selectedNode=null;
+  renderParams();renderDynamic();
+}
+function executeCustom(){
+  var valResult=S.activeTopic.validate(S.editCode,S.paramValues);
+  S.validationResult=valResult;
+  if(!valResult.isValid){S.status='error';syncTimer();renderDynamic();return;}
+  var plan=S.activeTopic.buildExecutionPlan(S.editCode,S.paramValues);
+  S.snapshots=plan.steps;S.mode='CUSTOM';S.currentStep=0;S.status='paused';S.selectedNode=null;
+  syncTimer();renderDynamic();
+}
+function copyToEditSpace(){S.editCode=S.benchmarkCode;renderWorkbench();}
+function copyBenchmarkRaw(){
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(S.benchmarkCode);}
+    else{var ta=document.createElement('textarea');ta.value=S.benchmarkCode;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);}
+  }catch(e){}
+  S.copiedBenchmark=true;renderWorkbench();
+  setTimeout(function(){S.copiedBenchmark=false;renderWorkbench();},2000);
+}
+function resetToDefault(){
+  var code=S.activePreset?S.activePreset.code:S.activeTopic.defaultCode;
+  S.editCode=code;S.benchmarkCode=code;
+  S.validationResult={isValid:true,issues:[]};
+  var initialParams={};
+  S.activeTopic.parameters.forEach(function(p){initialParams[p.id]=(S.activePreset&&S.activePreset.parameters&&S.activePreset.parameters[p.id]!=null)?S.activePreset.parameters[p.id]:p.defaultValue;});
+  S.paramValues=initialParams;
+  var plan=S.activeTopic.buildExecutionPlan(code,initialParams);
+  S.snapshots=plan.steps;S.benchmarkSnapshots=plan.steps;
+  S.mode='DEFAULT';S.currentStep=0;S.status='idle';S.selectedNode=null;
+  syncTimer();renderAll();
+}
+function nextStep(){
+  if(S.currentStep<S.snapshots.length-1){S.currentStep++;}
+  else{S.status='completed';syncTimer();}
+  renderDynamic();
+}
+function prevStep(){
+  if(S.currentStep>0){if(S.status==='completed')S.status='paused';S.currentStep--;}
+  syncTimer();renderDynamic();
+}
+function resetPlay(){S.currentStep=0;S.status='paused';syncTimer();renderDynamic();}
+function handlePlay(){if(S.currentStep>=S.snapshots.length-1)S.currentStep=0;S.status='running';syncTimer();renderDynamic();}
+function handlePause(){S.status='paused';syncTimer();renderDynamic();}
+function setSpeed(s){S.playbackSpeed=s;syncTimer();renderDeck();}
+function toggleParams(){S.isParamsOpen=!S.isParamsOpen;layoutRowA();renderParams();renderDeck();}
+function setView(v){S.activeView=v;renderWorkbench();renderHeader();}
+function setDepth(d){S.explanationDepth=d;renderInspector();}
+function openDocs(){S.isDocsOpen=true;renderModals();}
+function closeDocs(){S.isDocsOpen=false;renderModals();}
+function openComparison(){S.isComparisonOpen=true;renderModals();}
+function closeComparison(){S.isComparisonOpen=false;renderModals();}
+function selectStepFromTimeline(s){S.currentStep=s;if(S.status==='completed')S.status='paused';syncTimer();renderDynamic();}
+function setTimelineView(v){S.timelineView=v;renderTimeline();}
+function setCatalystTab(t){S.catalystTab=t;S.selectedNode=null;renderViz();}
+function selectNodeById(id){
+  var snap=activeSnapshot();if(!snap||!snap.state||!snap.state.rootNode)return;
+  var found=findNode(snap.state.rootNode,id);
+  S.selectedNode=found;renderViz();
+}
+function findNode(node,id){
+  if(!node)return null;
+  if(node.id===id)return node;
+  if(node.children)for(var i=0;i<node.children.length;i++){var f=findNode(node.children[i],id);if(f)return f;}
+  return null;
+}
+function closeDrawer(){S.selectedNode=null;renderViz();}
+function toggleTopicDD(){S.topicDD=!S.topicDD;S.presetDD=false;renderHeader();}
+function togglePresetDD(){S.presetDD=!S.presetDD;S.topicDD=false;renderHeader();}
+function closeDropdowns(){if(S.topicDD||S.presetDD){S.topicDD=false;S.presetDD=false;renderHeader();}}
+
+/* =====================================================================
+   PLAYBACK TIMER
+===================================================================== */
+function syncTimer(){
+  if(playTimer){clearInterval(playTimer);playTimer=null;}
+  if(S.status==='running'){
+    var intervalMs=Math.round(1800/S.playbackSpeed);
+    playTimer=setInterval(function(){
+      if(S.currentStep<S.snapshots.length-1){S.currentStep++;}
+      else{S.status='completed';syncTimer();}
+      renderDynamic();
+    },intervalMs);
+  }
+}
+
+/* =====================================================================
+   RENDER: HEADER
+===================================================================== */
+function statusBadge(){
+  if(S.status==='error')return '<span class="st-badge st-err"><span class="dot ping" style="background:var(--ro5)"></span>ERROR</span>';
+  if(S.status==='running')return '<span class="st-badge st-run"><span class="dot ping" style="background:var(--cy4)"></span>RUNNING</span>';
+  if(S.status==='completed'||S.currentStep>=S.snapshots.length-1)return '<span class="st-badge st-done">'+icon('check2','s3')+'COMPLETED</span>';
+  if(S.mode==='CUSTOM')return '<span class="st-badge st-cust">'+icon('flame','s3')+'CUSTOM EXECUTING</span>';
+  return '<span class="st-badge st-def"><span class="dot" style="background:var(--bl4)"></span>DEFAULT BENCHMARK</span>';
+}
+function renderHeader(){
+  var t=S.activeTopic;
+  var h='';
+  h+='<div class="hdr-left">';
+  h+='<div style="display:flex;align-items:center;gap:12px">';
+  h+='<div class="brand-ic">'+icon('cpu','s4')+'</div>';
+  h+='<div>';
+  h+='<div class="brand-t"><b>Spark Catalyst Workstation</b><span class="sim-badge">SIMULATOR</span></div>';
+  h+='<div class="engine-row"><span>Topic Engine:</span>';
+  h+='<span class="dd-wrap"><button id="btn-topic-selector" class="dd-btn" onclick="toggleTopicDD()"><span>'+esc(t.shortName)+'</span>'+icon('chevd','s3')+'</button>';
+  if(S.topicDD){
+    h+='<div class="dd-panel"><div class="dd-cap">Simulation Topics</div>';
+    for(var i=0;i<SIMULATION_TOPICS.length;i++){var tt=SIMULATION_TOPICS[i];
+      h+='<button id="topic-option-'+tt.id+'" class="dd-item'+(tt.id===t.id?' act':'')+'" onclick="selectTopic(\''+tt.id+'\')"><span style="font-weight:500">'+esc(tt.name)+'</span><span class="sub">'+esc(tt.category)+'</span></button>';}
+    h+='</div>';
+  }
+  h+='</span></div></div></div>';
+  if(t.presets&&t.presets.length>0){
+    h+='<div class="hide-md" style="position:relative"><button id="btn-preset-selector" class="preset-btn" onclick="togglePresetDD()">'+icon('term','s35')+'<span>'+esc(S.activePreset?S.activePreset.name:'Scenarios')+'</span>'+icon('chevd','s3')+'</button>';
+    if(S.presetDD){
+      h+='<div class="dd-panel wide"><div class="dd-cap">Scenario Presets</div>';
+      for(var p=0;p<t.presets.length;p++){var pr=t.presets[p];
+        h+='<button id="preset-option-'+pr.id+'" class="dd-item'+(S.activePreset&&pr.id===S.activePreset.id?' act':'')+'" onclick="selectPreset(\''+pr.id+'\')"><span style="font-weight:500">'+esc(pr.name)+'</span><span class="sub2">'+esc(pr.description)+'</span></button>';}
+      h+='</div>';
+    }
+    h+='</div>';
+  }
+  h+='</div>';
+  h+='<div class="hdr-right">';
+  h+=statusBadge();
+  h+='<div class="step-ctr"><span class="a">STEP</span><span class="b">'+String(S.currentStep+1).padStart(2,'0')+'</span><span class="c">/</span><span class="d">'+String(S.snapshots.length).padStart(2,'0')+'</span></div>';
+  h+='<div class="view-sw">';
+  h+='<button id="view-split" class="vsw-btn'+(S.activeView==='split'?' act':'')+'" onclick="setView(\'split\')" title="Split View: Default Benchmark & Edit Space side-by-side">'+icon('layers','s35')+'<span>Split View</span></button>';
+  h+='<button id="view-benchmark" class="vsw-btn'+(S.activeView==='benchmark'?' act':'')+'" onclick="setView(\'benchmark\')" title="Benchmark Focus: Full width read-only canonical query">'+icon('eye','s35')+'<span>Benchmark</span></button>';
+  h+='<button id="view-edit" class="vsw-btn'+(S.activeView==='edit'?' act':'')+'" onclick="setView(\'edit\')" title="Edit Focus: Full width interactive editor">'+icon('code','s35')+'<span>Edit Space</span></button>';
+  h+='</div>';
+  h+='<button id="btn-open-comparison" class="hdr-btn" onclick="openComparison()" title="Compare Default vs Custom Execution Plans & Telemetry">'+icon('gitcmp','s35')+'<span class="hide-md">Compare</span></button>';
+  h+='<button id="btn-open-docs" class="hdr-btn guide-btn" onclick="openDocs()" title="Catalyst Architecture & Workstation Guide">'+icon('book','s35')+'<span class="hide-md">Guide</span></button>';
+  h+='</div>';
+  document.getElementById('hdr').innerHTML=h;
+}
+
+/* =====================================================================
+   RENDER: CONTROL DECK
+===================================================================== */
+function renderDeck(){
+  var snap=activeSnapshot();
+  var isRunning=S.status==='running';
+  var isFirst=S.currentStep===0;
+  var isLast=S.currentStep>=S.snapshots.length-1;
+  var speeds=[0.5,1,2,4];
+  var h='';
+  h+='<div class="dk-group">';
+  h+='<button id="btn-prev-step" class="ctl-btn'+((isFirst||isRunning)?' dis':'')+'" '+(isFirst||isRunning?'disabled':'')+' onclick="prevStep()" title="Previous Step (Left Arrow)">'+icon('skipb','s4')+'<span class="hide-sm">Prev</span></button>';
+  h+='<button id="btn-play-pause" class="play-btn '+(isRunning?'stop':'go')+'" onclick="'+(isRunning?'handlePause()':'handlePlay()')+'" title="Play/Pause (Space)">'+(isRunning?icon('pause','s4')+'<span>Pause</span>':icon('play','s4')+'<span>'+(isLast?'Replay':'Play')+'</span>')+'</button>';
+  h+='<button id="btn-next-step" class="ctl-btn'+((isLast||isRunning)?' dis':'')+'" '+(isLast||isRunning?'disabled':'')+' onclick="nextStep()" title="Next Step (Right Arrow)"><span class="hide-sm">Next</span>'+icon('skipf','s4')+'</button>';
+  h+='<div class="vdiv"></div>';
+  h+='<button id="btn-reset-step" class="ctl-ico" onclick="resetPlay()" title="Reset to Step 0 (R)">'+icon('rccw','s35')+'</button>';
+  if(S.mode==='CUSTOM')h+='<button id="btn-reset-default" class="ctl-def" onclick="resetToDefault()" title="Reset to Canonical Benchmark">'+icon('spark','s3')+'<span>Reset to Default</span></button>';
+  h+='</div>';
+  h+='<div class="ev-banner"><span class="l">'+icon('zap','s3')+' Event:</span><span class="v" title="'+escA((snap&&snap.event&&snap.event.label)||'')+'">'+esc((snap&&snap.event&&snap.event.label)||'Simulation Initialized')+'</span></div>';
+  h+='<div class="dk-group">';
+  h+='<div class="spd-wrap">'+icon('clock','s3')+'<span style="width:4px"></span>';
+  for(var i=0;i<speeds.length;i++){var s=speeds[i];
+    h+='<button id="btn-speed-'+s+'" class="spd-btn'+(S.playbackSpeed===s?' act':'')+'" onclick="setSpeed('+s+')">'+s+'\u00d7</button>';}
+  h+='</div>';
+  h+='<button id="btn-toggle-params" class="tgl-btn '+(S.isParamsOpen?'on':'off')+'" onclick="toggleParams()">'+icon('sett','s35')+'<span>Parameters</span></button>';
+  h+='</div>';
+  document.getElementById('deck').innerHTML=h;
+}
+
+/* =====================================================================
+   RENDER: WORKBENCH
+===================================================================== */
+function sqlClass(line){
+  var t=line.trim().toUpperCase();
+  if(t.indexOf('SELECT')===0||t.indexOf('FROM')===0||t.indexOf('WHERE')===0||t.indexOf('JOIN')===0||t.indexOf('ORDER BY')===0||t.indexOf('GROUP BY')===0)return 'k-cyan';
+  if(line.indexOf('AND ')!==-1||line.indexOf('OR ')!==-1||line.indexOf('ON ')!==-1)return 'k-indigo';
+  return 'k-plain';
+}
+function renderWorkbench(){
+  var snap=activeSnapshot();
+  var activeLine=snap?snap.activeLine:undefined;
+  var bLines=S.benchmarkCode.split('\n');
+  var eLines=S.editCode.split('\n');
+  var hasErrors=S.validationResult&&!S.validationResult.isValid;
+  var isExecuting=S.status==='running';
+  var focused=document.activeElement&&document.activeElement.id==='ed-ta';
+  var sel=focused?{s:document.activeElement.selectionStart,e:document.activeElement.selectionEnd}:S._taSel;
+  var h='<div class="wb-grid '+(S.activeView==='split'?'split':'one')+'">';
+  if(S.activeView==='split'||S.activeView==='benchmark'){
+    h+='<div class="wb-panel" id="panel-default-benchmark">';
+    h+='<div class="wb-tb"><div class="wb-tl">'+icon('lock','s35')+'<b>Default Benchmark</b><span class="tag">READ-ONLY</span></div>';
+    h+='<div style="display:flex;align-items:center;gap:6px">';
+    h+='<button id="btn-copy-to-edit" class="tb-btn" onclick="copyToEditSpace()" title="Copy benchmark query into the editable space">'+icon('arr','s3')+'<span>Copy to Edit Space</span></button>';
+    h+='<button id="btn-copy-benchmark-raw" class="ico-btn" onclick="copyBenchmarkRaw()" title="Copy to clipboard">'+(S.copiedBenchmark?icon('check','s35')+'<span style="color:var(--em4)"></span>':icon('copy','s35'))+'</button>';
+    h+='</div></div>';
+    h+='<div class="wb-code"><table><tbody>';
+    for(var i=0;i<bLines.length;i++){
+      var lineNum=i+1,isActive=activeLine===lineNum,isComment=bLines[i].trim().indexOf('--')===0;
+      h+='<tr class="'+(isActive?'ln-act':'')+'"><td class="lno">'+lineNum+'</td><td class="ltxt">'+(isActive?'<span class="pdot"></span>':'')+'<span class="'+(isComment?'k-cmt':sqlClass(bLines[i]))+'">'+esc(bLines[i])+'</span></td></tr>';
+    }
+    h+='</tbody></table></div></div>';
+  }
+  if(S.activeView==='split'||S.activeView==='edit'){
+    h+='<div class="wb-panel" id="panel-interactive-edit">';
+    h+='<div class="wb-tb"><div class="wb-tl">'+icon('edit3','s35')+'<b>Interactive Edit Space</b><span class="tag am">CUSTOM</span></div>';
+    h+='<div style="display:flex;align-items:center;gap:8px">';
+    h+='<span class="hide-sm" style="font-size:11px;color:var(--s500);font-family:ui-monospace,monospace">Ctrl+Enter to Run</span>';
+    h+='<button id="btn-execute-manually" class="exec-btn'+(isExecuting?' dis':'')+'" '+(isExecuting?'disabled':'')+' onclick="executeCustom()" title="Parse and execute modified query deterministically">'+icon('playc','s35')+'<span>Execute Manually</span></button>';
+    h+='</div></div>';
+    if(hasErrors&&S.validationResult.issues&&S.validationResult.issues.length>0){
+      h+='<div class="err-bar">'+icon('alert','s35')+'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(S.validationResult.issues[0].message)+'</span></div>';
+    }
+    h+='<div class="ed-wrap"><div class="gutter">';
+    for(var g=0;g<eLines.length;g++)h+='<div>'+(g+1)+'</div>';
+    h+='</div><textarea id="ed-ta" spellcheck="false" placeholder="Enter custom SQL or Spark query definition here..."></textarea></div>';
+    h+='</div>';
+  }
+  h+='</div>';
+  document.getElementById('wb').innerHTML=h;
+  var ta=document.getElementById('ed-ta');
+  if(ta){ta.value=S.editCode;
+    if(sel){try{ta.setSelectionRange(sel.s,sel.e);}catch(e){}}
+    if(focused)ta.focus();
+  }
+}
+
+/* =====================================================================
+   RENDER: PARAMETERS PANEL
+===================================================================== */
+function renderParams(){
+  if(!S.isParamsOpen){document.getElementById('pr-root').innerHTML='';return;}
+  var cats=[];
+  S.activeTopic.parameters.forEach(function(p){var c=p.category||'General';if(cats.indexOf(c)===-1)cats.push(c);});
+  var h='<div class="card pr-card" id="parameters-panel">';
+  h+='<div class="card-hd" style="margin-bottom:12px"><div class="card-t">'+icon('sliders','s35')+'<span>Simulation Tuning Parameters</span></div>';
+  h+='<button class="link-btn" onclick="resetParams()" title="Restore default parameters">'+icon('refcw','s3')+'<span>Defaults</span></button></div>';
+  h+='<div>';
+  cats.forEach(function(cat){
+    var catParams=S.activeTopic.parameters.filter(function(p){return (p.category||'General')===cat;});
+    h+='<div><div class="pr-cat">'+esc(cat)+'</div>';
+    catParams.forEach(function(param){
+      var curVal=S.paramValues[param.id]!=null?S.paramValues[param.id]:param.defaultValue;
+      h+='<div class="pr-item">';
+      h+='<div class="pr-lab"><label class="pr-name" for="param-'+param.id+'"><span>'+esc(param.label)+'</span>'+(param.description?'<span title="'+escA(param.description)+'">'+icon('help','s3')+'</span>':'')+'</label>';
+      h+='<span class="pr-val" data-badge="'+param.id+'">'+paramBadgeText(param.id)+'</span></div>';
+      if(param.type==='range'){
+        h+='<div class="pr-range"><span class="pr-min">'+param.min+'</span>';
+        h+='<input id="param-'+param.id+'" type="range" min="'+param.min+'" max="'+param.max+'" step="'+(param.step||1)+'" value="'+curVal+'" oninput="onParamInput(\''+param.id+'\',this.value)"/>';
+        h+='<span class="pr-min">'+param.max+'</span></div>';
+      }else if(param.type==='boolean'){
+        h+='<div style="display:flex;align-items:center;gap:8px;margin-top:4px">';
+        h+='<button type="button" data-sw="'+param.id+'" class="sw '+(curVal?'on':'off')+'" onclick="onParamToggle(\''+param.id+'\')" id="param-'+param.id+'"><span class="knob" style="transform:'+(curVal?'translateX(16px)':'translateX(0)')+'"></span></button>';
+        h+='<span class="sw-note" data-swnote="'+param.id+'">'+(curVal?'Active in Catalyst planner':'Bypassed in planner')+'</span></div>';
+      }else if(param.type==='select'&&param.options){
+        h+='<select class="pr-sel" id="param-'+param.id+'" onchange="onParamInput(\''+param.id+'\',this.value)">';
+        param.options.forEach(function(opt){
+          h+='<option value="'+opt.value+'"'+(String(opt.value)===String(curVal)?' selected':'')+'>'+esc(opt.label)+'</option>';
+        });
+        h+='</select>';
+      }
+      h+='</div>';
+    });
+    h+='</div>';
+  });
+  h+='</div></div>';
+  document.getElementById('pr-root').innerHTML=h;
+}
+function layoutRowA(){
+  var vc=document.getElementById('viz-col');
+  var pc=document.getElementById('pr-col');
+  if(S.isParamsOpen){vc.classList.add('wp');pc.style.display='';}
+  else{vc.classList.remove('wp');pc.style.display='none';}
+}
+
+/* =====================================================================
+   RENDER: VISUALIZER (Catalyst + Volcano)
+===================================================================== */
+var PHASES=[
+ {id:'unresolved_logical',label:'1. Unresolved Plan',stepIdx:0},
+ {id:'analyzed_logical',label:'2. Analyzed Plan',stepIdx:1},
+ {id:'optimized_logical',label:'3. Optimized Logical',stepIdx:2},
+ {id:'physical_planning',label:'4. Physical Plan',stepIdx:3},
+ {id:'codegen_execution',label:'5. WholeStage Codegen',stepIdx:4}
+];
+function nodeColorClass(type){
+  switch(type){
+    case 'FileSourceScan':case 'LogicalRelation':case 'UnresolvedRelation':return 'nb-blue';
+    case 'Filter':return 'nb-em';
+    case 'Project':return 'nb-in';
+    case 'Join':case 'BroadcastHashJoin':case 'SortMergeJoin':return 'nb-pu';
+    case 'BroadcastExchange':case 'ShuffleExchange':return 'nb-ro';
+    case 'WholeStageCodegen':return 'nb-cy';
+    default:return 'nb-sl';
+  }
+}
+function renderTreeNode(node,selectedId){
+  if(!node)return '';
+  var sel=node.id===selectedId;
+  var h='<div class="tree-col">';
+  h+='<div class="node-box '+nodeColorClass(node.type)+(sel?' sel':'')+'" onclick="selectNodeById(\''+node.id+'\')">';
+  if(node.transformationBadge)h+='<span class="tbadge">'+esc(node.transformationBadge)+'</span>';
+  h+='<div class="node-t">';
+  if(node.type==='WholeStageCodegen')h+=icon('zap','s3');
+  if(node.type&&node.type.indexOf('Join')!==-1)h+=icon('spark','s3');
+  if(node.type&&node.type.indexOf('Scan')!==-1)h+=icon('db','s3');
+  h+='<span>'+esc(node.title)+'</span></div>';
+  if(node.details)h+='<div class="node-d" title="'+escA(node.details)+'">'+esc(node.details)+'</div>';
+  h+='</div>';
+  if(node.children&&node.children.length>0){
+    h+='<div class="cn-down"></div>';
+    h+='<div class="ch-row" style="flex-direction:row">';
+    if(node.children.length>1)h+='<div class="hline"></div>';
+    node.children.forEach(function(child){h+=renderTreeNode(child,selectedId);});
+    h+='</div>';
+  }
+  h+='</div>';
+  return h;
+}
+function renderStageCard(stage){
+  var h='<div class="stage-card"><div class="st-hd"><div style="display:flex;align-items:center;gap:8px"><span class="st-name">'+esc(stage.name)+'</span>';
+  h+=stage.isShuffle?'<span class="st-badge st-shuf">SHUFFLE REQUIRED</span>':'<span class="st-badge st-pipe">PIPELINED (NO SHUFFLE)</span>';
+  h+='</div><span style="color:var(--s400);font-size:11px">'+stage.partitions+' Partitions</span></div>';
+  h+='<div style="display:flex;flex-wrap:wrap;align-items:center;margin-bottom:8px"><span style="font-size:10px;color:var(--s500)">Pipelined Operators:</span>';
+  stage.operators.forEach(function(op){h+='<span class="op-chip">'+esc(op)+'</span>';});
+  h+='</div>';
+  if(stage.isShuffle)h+='<div style="display:flex;align-items:center;gap:16px;font-size:11px;color:var(--s400);padding-top:4px;border-top:1px solid var(--s900)"><span>Shuffle Read: <strong style="color:var(--s200)">'+stage.shuffleReadMB+' MB</strong></span><span>Shuffle Write: <strong style="color:var(--s200)">'+stage.shuffleWriteMB+' MB</strong></span></div>';
+  h+='</div>';
+  return h;
+}
+function renderCatalystViz(state){
+  var currentPhaseIdx=-1;
+  for(var i=0;i<PHASES.length;i++)if(PHASES[i].id===state.phase)currentPhaseIdx=i;
+  var h='<div class="viz" id="catalyst-visualizer">';
+  h+='<div class="viz-top"><div class="viz-lab">'+icon('spark','s35')+'<span class="l" style="color:var(--cy4)"></span><b>Catalyst Pipeline:</b></div>';
+  h+='<div class="ph-row">';
+  PHASES.forEach(function(p,idx){
+    var isCompleted=idx<currentPhaseIdx,isCurrent=idx===currentPhaseIdx;
+    h+='<div class="ph-pill '+(isCurrent?'ph-cur':isCompleted?'ph-done':'ph-todo')+'">';
+    h+=isCompleted?icon('check2','s3'):isCurrent?'<span class="dot ping" style="background:var(--cy4)"></span>':'<span class="dot" style="background:var(--s600)"></span>';
+    h+='<span>'+p.label+'</span></div>';
+  });
+  h+='</div>';
+  h+='<div class="tab-row">';
+  h+='<button class="tab-btn'+(S.catalystTab==='tree'?' act':'')+'" onclick="setCatalystTab(\'tree\')">'+icon('boxes','s35')+'<span>Plan Tree</span></button>';
+  h+='<button class="tab-btn'+(S.catalystTab==='stages'?' act':'')+'" onclick="setCatalystTab(\'stages\')">'+icon('net','s35')+'<span>Stage DAG</span></button>';
+  h+='<button class="tab-btn'+(S.catalystTab==='codegen'?' act':'')+'" onclick="setCatalystTab(\'codegen\')">'+icon('fcode','s35')+'<span>Java Codegen</span></button>';
+  h+='<button class="tab-btn'+(S.catalystTab==='rules'?' act':'')+'" onclick="setCatalystTab(\'rules\')">'+icon('zap','s35')+'<span>Rules ('+((state.ruleApplications&&state.ruleApplications.length)||0)+')</span></button>';
+  h+='</div></div>';
+  h+='<div class="viz-body"><div class="viz-canvas" style="display:flex;justify-content:center;align-items:flex-start">';
+  if(S.catalystTab==='tree'){
+    h+='<div style="width:100%;max-width:672px;padding:8px 0;display:flex;flex-direction:column;align-items:center">'+renderTreeNode(state.rootNode,S.selectedNode?S.selectedNode.id:null)+'</div>';
+  }else if(S.catalystTab==='stages'){
+    var totalParts=0;(state.stages||[]).forEach(function(s){totalParts+=s.partitions;});
+    h+='<div style="width:100%;max-width:768px;padding:8px 0">';
+    h+='<div style="font-size:12px;color:var(--s400);font-family:ui-monospace,monospace;display:flex;align-items:center;justify-content:space-between;padding-bottom:8px;border-bottom:1px solid var(--s800);margin-bottom:12px"><span>Distributed RDD Execution Stages (DAG Scheduler)</span><span>Partitions: '+totalParts+' total</span></div>';
+    if(!state.stages||state.stages.length===0){h+='<div class="empty-note">Stage boundary decomposition is generated during Physical Planning and Code Generation (Phases 4 & 5).</div>';}
+    else{state.stages.forEach(function(stage){h+=renderStageCard(stage);});}
+    h+='</div>';
+  }else if(S.catalystTab==='codegen'){
+    h+='<div style="width:100%;height:100%;display:flex;flex-direction:column">';
+    h+='<div class="code-hd"><span>Janino In-Memory Java Bytecode Synthesizer</span><span style="font-size:11px;color:var(--s400)">Project Tungsten (WholeStageCodegenExec)</span></div>';
+    h+='<pre class="code-pre"><code>'+esc(state.generatedCode)+'</code></pre></div>';
+  }else if(S.catalystTab==='rules'){
+    h+='<div style="width:100%;max-width:672px;padding:8px 0">';
+    h+='<div style="font-size:12px;color:var(--s400);font-family:ui-monospace,monospace;padding-bottom:8px;border-bottom:1px solid var(--s800);margin-bottom:12px">Catalyst RuleExecutor History (Pattern Matching Transforms)</div>';
+    if(!state.ruleApplications||state.ruleApplications.length===0){h+='<div class="empty-note">Rule transformations begin during Phase 2 (Analysis) and Phase 3 (Logical Optimization).</div>';}
+    else{state.ruleApplications.forEach(function(rule){
+      h+='<div class="rule-item"><div style="display:flex;align-items:center;justify-content:space-between;color:var(--cy3);font-weight:600;margin-bottom:4px"><span>'+esc(rule.ruleName)+'</span><span style="font-size:10px;color:var(--s500);font-weight:400">'+rule.timeMs+' ms</span></div>';
+      h+='<div style="color:var(--s400);font-size:11px;margin-bottom:4px">'+esc(rule.description)+'</div>';
+      h+='<div style="font-size:10px;color:var(--in4)">Target: '+esc(rule.affectedNode)+'</div></div>';
+    });}
+    h+='</div>';
+  }
+  h+='</div>';
+  if(S.selectedNode){
+    var n=S.selectedNode;
+    h+='<div class="drawer"><div class="dr-hd"><span style="font-weight:600;color:var(--cy3);font-family:ui-monospace,monospace">'+esc(n.name)+'</span>';
+    h+='<button class="tb-btn" onclick="closeDrawer()">Close</button></div><div>';
+    h+='<div><span class="dr-lab">Operation</span><p class="dr-val">'+esc(n.title)+'</p></div>';
+    h+='<div><span class="dr-lab">Details</span><p class="dr-mono">'+esc(n.details)+'</p></div>';
+    if(n.pushedFilters&&n.pushedFilters.length>0){
+      h+='<div><span class="dr-lab" style="color:var(--em4);font-weight:600">Pushed Down Filters</span><div style="margin-top:4px">';
+      n.pushedFilters.forEach(function(f){h+='<span class="fchip">'+esc(f)+'</span>';});
+      h+='</div></div>';
+    }
+    if(n.schema&&n.schema.length>0){
+      h+='<div><span class="dr-lab">Resolved Schema</span><div style="margin-top:4px;max-height:144px;overflow:auto;border:1px solid var(--s800);border-radius:4px;background:rgba(15,23,42,.4)"><table class="sch-tbl"><tbody>';
+      n.schema.forEach(function(attr){h+='<tr><td class="sch-n">'+esc(attr.name)+'</td><td class="sch-t">'+esc(attr.dataType)+'</td></tr>';});
+      h+='</tbody></table></div></div>';
+    }
+    if(n.transformationBadge)h+='<div class="dr-call"><span style="font-weight:600;display:block;margin-bottom:2px">Optimization Applied:</span>'+esc(n.transformationBadge)+'</div>';
+    h+='</div></div>';
+  }
+  h+='</div></div>';
+  return h;
+}
+function renderVolcanoViz(state){
+  var h='<div class="viz" id="volcano-visualizer" style="padding:16px;overflow:hidden">';
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid var(--s800);margin-bottom:12px;flex-wrap:wrap;gap:8px">';
+  h+='<div style="display:flex;align-items:center;gap:8px">'+icon('db','s4')+'<span style="font-weight:700;color:var(--s200);font-size:14px">Volcano / Cascades Dynamic Programming Memo</span></div>';
+  h+='<span class="tag" style="background:var(--in95);border-color:var(--in8);color:var(--in3);font-family:ui-monospace,monospace">Phase: '+esc(state.phase)+'</span></div>';
+  h+='<div style="display:grid;grid-template-columns:1fr;gap:16px;flex:1;overflow:hidden">';
+  h+='<div class="sec-box" style="display:flex;flex-direction:column;overflow:hidden"><div class="card-t" style="margin-bottom:8px">'+icon('search','s35')+'<span>Memo Equivalence Groups & Candidates</span></div>';
+  h+='<div style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch">';
+  if(!state.memoTable||state.memoTable.length===0){h+='<div style="color:var(--s500);padding:32px 0;text-align:center">Memo space being populated during initialization...</div>';}
+  else{state.memoTable.forEach(function(item){
+    h+='<div class="memo-item '+(item.isWinner?'memo-win':'memo-los')+'"><div><span style="font-size:10px;color:var(--s500);margin-right:8px">'+esc(item.group)+'</span><span style="font-weight:500">'+esc(item.operator)+'</span></div>';
+    h+='<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px">Cost: '+item.cost+'</span>'+(item.isWinner?icon('check2','s35'):'')+'</div></div>';
+  });}
+  h+='</div></div>';
+  h+='<div class="sec-box" style="display:flex;flex-direction:column;justify-content:space-between"><div>';
+  h+='<div class="card-t" style="margin-bottom:8px">'+icon('cpu','s35')+'<span>Active Cost-Based Plan Selection</span></div>';
+  h+='<div style="padding:12px;background:var(--s900);border-radius:4px;border:1px solid var(--s800);font-family:ui-monospace,monospace;color:var(--cy3);margin-bottom:12px">'+esc(state.selectedPlan)+'</div>';
+  h+='<div style="color:var(--s400)"><div style="font-size:11px"><strong style="color:var(--s300)">Active Operation:</strong> '+esc(state.activeOperation)+'</div>';
+  h+='<p style="font-size:11px;line-height:1.5;margin-top:6px">The Volcano engine branches candidate physical algorithms (Index Scan vs Seq Scan, Nested Loop vs Hash Join) and preserves the cheapest plan in the Memo table.</p></div></div>';
+  h+='<div style="padding:8px;background:rgba(30,27,75,.4);border:1px solid rgba(55,48,163,.6);border-radius:4px;font-size:11px;color:var(--in3)">Rule transformations maintain logical equivalence while evaluating physical execution costs.</div>';
+  h+='</div></div></div>';
+  return h;
+}
+function renderViz(){
+  var snap=activeSnapshot();
+  var root=document.getElementById('viz-root');
+  if(!snap){root.innerHTML='<div class="viz-empty">No plan available.</div>';return;}
+  if(S.activeTopic.id==='spark_catalyst')root.innerHTML=renderCatalystViz(snap.state);
+  else if(S.activeTopic.id==='volcano_optimizer')root.innerHTML=renderVolcanoViz(snap.state);
+  else root.innerHTML='<div class="viz-empty">Visualizer not registered for topic: '+esc(S.activeTopic.name)+'</div>';
+}
+
+/* =====================================================================
+   RENDER: TELEMETRY MATRIX
+===================================================================== */
+function getTelemetryAnalysis(values){
+  var shuffle=values['shuffleVolumeMB']||0;
+  var latency=values['estimatedLatencyMs']||0;
+  var scanned=values['scannedRows']||0;
+  if(shuffle===0&&latency<400){
+    return{status:'optimal',title:'High-Efficiency Broadcast Execution',description:'Zero network shuffle detected. Small table fits inside autoBroadcastJoinThreshold, allowing BroadcastHashJoin with in-memory hash probe and low latency.'};
+  }
+  if(shuffle>0){
+    return{status:'warning',title:'Shuffle Network Saturation Detected',description:'Query triggered SortMergeJoin with '+(values['shuffleExchanges']||2)+' ShuffleExchange stages, redistributing '+shuffle+' MB across cluster network interfaces. Consider increasing broadcast threshold or filtering join inputs.'};
+  }
+  if(scanned>5000000){
+    return{status:'warning',title:'Heavy Disk Scan I/O',description:scanned.toLocaleString()+' rows being scanned. Predicate pushdown may be disabled or column pruning unoptimized.'};
+  }
+  return{status:'neutral',title:'Normal Pipelined Execution',description:'Catalyst rules have structured the query plan. Pipelined execution stages are preparing distributed partitions.'};
+}
+function renderTelemetry(){
+  var snap=activeSnapshot();
+  var prev=previousSnapshot();
+  var values=(snap&&snap.metrics)||{};
+  var analysis=getTelemetryAnalysis(values);
+  var h='<div class="card" id="telemetry-matrix" style="padding:12px">';
+  h+='<div class="card-hd"><div class="card-t">'+icon('act','s35')+'<span>Execution Telemetry Matrix</span></div>';
+  h+='<span style="font-size:10px;color:var(--s500);font-family:ui-monospace,monospace">STEP '+(S.currentStep+1)+' STATE</span></div>';
+  h+='<div class="tel-grid">';
+  S.activeTopic.metrics.forEach(function(m){
+    var val=values[m.id]!=null?values[m.id]:0;
+    var prevVal=prev&&prev.metrics?prev.metrics[m.id]:undefined;
+    var diff=prevVal!==undefined?val-prevVal:0;
+    h+='<div class="m-card'+(m.isKeyMetric?' key':'')+'">';
+    h+='<div class="m-lab"><span title="'+escA(m.label)+'" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(m.label)+'</span>'+(m.unit?'<span class="u">'+esc(m.unit)+'</span>':'')+'</div>';
+    h+='<div class="m-row"><div class="m-val">'+fmt(val)+'</div>';
+    if(diff!==0)h+='<div class="m-delta" style="color:'+(diff<0?'var(--em4)':'var(--am4)')+'">'+(diff>0?'+'+diff:diff)+'</div>';
+    h+='</div>';
+    if(m.description)h+='<div class="m-desc" title="'+escA(m.description)+'">'+esc(m.description)+'</div>';
+    h+='</div>';
+  });
+  h+='</div>';
+  h+='<div class="an-card '+(analysis.status==='optimal'?'an-ok':analysis.status==='warning'?'an-warn':'an-neu')+'">';
+  h+=analysis.status==='optimal'?icon('check2','s4'):analysis.status==='warning'?icon('atri','s4'):icon('info','s4');
+  h+='<div style="flex:1"><span class="an-t">Telemetry Analysis: '+esc(analysis.title)+'</span><p class="an-d">'+esc(analysis.description)+'</p></div></div>';
+  h+='</div>';
+  document.getElementById('tel-root').innerHTML=h;
+}
+
+/* =====================================================================
+   RENDER: TIMELINE & EVENT LOG
+===================================================================== */
+function renderTimeline(){
+  var events=[];S.snapshots.forEach(function(s){if(s.event)events.push(s.event);});
+  var totalSteps=S.snapshots.length;
+  var h='<div class="card tl-card" id="timeline-eventlog">';
+  h+='<div class="card-hd" style="margin-bottom:10px"><div class="card-t">'+icon('clock','s35')+'<span>Execution Timeline & Trace</span></div>';
+  h+='<div class="depth-sw">';
+  h+='<button class="dep-btn'+(S.timelineView==='timeline'?' act':'')+'" onclick="setTimelineView(\'timeline\')">Visual Track</button>';
+  h+='<button class="dep-btn'+(S.timelineView==='log'?' act':'')+'" onclick="setTimelineView(\'log\')">Trace Log ('+events.length+')</button>';
+  h+='</div></div>';
+  if(S.timelineView==='timeline'){
+    h+='<div style="padding:8px 0;overflow-x:auto"><div class="tl-scrub" style="min-width:'+(totalSteps*80)+'px">';
+    h+='<div class="tl-track"></div>';
+    h+='<div class="tl-prog" style="width:'+(totalSteps>1?(S.currentStep/(totalSteps-1))*95:0)+'%"></div>';
+    for(var idx=0;idx<totalSteps;idx++){
+      var isPast=idx<S.currentStep,isCurrent=idx===S.currentStep;
+      var evt=events[idx];
+      h+='<button class="tl-mark '+(isCurrent?'tl-cur':isPast?'tl-past':'tl-fut')+'" onclick="selectStepFromTimeline('+idx+')" title="'+escA('Jump to Step '+(idx+1)+': '+((evt&&evt.label)||'Step'))+'">';
+      h+='<div class="tl-dot">'+(idx+1)+'</div>';
+      h+='<span class="tl-lab">'+esc(evt?(evt.label?evt.label.split(' ')[0]:'S'+idx):('S'+idx))+'</span></button>';
+    }
+    h+='</div></div>';
+  }else{
+    h+='<div class="log-scroll">';
+    events.forEach(function(evt,idx){
+      var isCurrent=evt.step===S.currentStep;
+      h+='<div class="log-item '+(isCurrent?'log-cur':'log-nor')+'" onclick="selectStepFromTimeline('+evt.step+')">';
+      h+='<div class="log-l"><span class="log-ts">['+esc(evt.timestamp)+']</span><span class="log-step">STEP '+(evt.step+1)+'</span><span class="log-tx">'+esc(evt.label)+'</span></div>';
+      h+='<div class="log-r">'+(evt.sourceLine?'<span class="log-ln">Line '+evt.sourceLine+'</span>':'')+(isCurrent?'<span class="dot ping" style="background:var(--cy4)"></span>':'')+'</div></div>';
+    });
+    h+='</div>';
+  }
+  h+='</div>';
+  document.getElementById('tl-root').innerHTML=h;
+}
+
+/* =====================================================================
+   RENDER: DEEP INSPECTOR
+===================================================================== */
+function renderInspector(){
+  var snap=activeSnapshot();
+  var explanation=snap?snap.explanation:null;
+  if(!explanation){document.getElementById('insp-root').innerHTML='<div class="card" style="padding:16px;text-align:center;color:var(--s500);font-size:12px">Select or advance a step to inspect technical details.</div>';return;}
+  var depthText=S.explanationDepth==='beginner'?((explanation.depths&&explanation.depths.beginner)||explanation.whatHappened):S.explanationDepth==='technical'?((explanation.depths&&explanation.depths.technical)||explanation.whyItHappened):((explanation.depths&&explanation.depths.internals)||explanation.underlyingMechanism);
+  var h='<div class="card insp" id="deep-inspector">';
+  h+='<div class="card-hd" style="margin-bottom:12px"><div class="card-t">'+icon('fsearch','s4')+'<span style="color:var(--s200)">'+esc(explanation.title)+'</span><span class="tag" style="background:var(--in95);border-color:var(--in8);color:var(--in3);font-family:ui-monospace,monospace">'+esc(explanation.phase)+'</span></div>';
+  h+='<div class="depth-sw">';
+  h+='<button id="depth-beginner" class="dep-btn'+(S.explanationDepth==='beginner'?' act':'')+'" onclick="setDepth(\'beginner\')">Beginner</button>';
+  h+='<button id="depth-technical" class="dep-btn'+(S.explanationDepth==='technical'?' act':'')+'" onclick="setDepth(\'technical\')">Technical</button>';
+  h+='<button id="depth-internals" class="dep-btn'+(S.explanationDepth==='internals'?' act':'')+'" onclick="setDepth(\'internals\')">Internals</button>';
+  h+='</div></div>';
+  h+='<div class="callout"><span class="cl">'+S.explanationDepth.toUpperCase()+' PERSPECTIVE</span><p>'+esc(depthText)+'</p></div>';
+  h+='<div class="insp-grid">';
+  h+='<div class="insp-sec"><div class="insp-t">'+icon('help','s35')+'<span>1. What Happened?</span></div><p class="insp-p">'+esc(explanation.whatHappened)+'</p></div>';
+  h+='<div class="insp-sec"><div class="insp-t">'+icon('spark','s35')+'<span>2. Why It Happened?</span></div><p class="insp-p">'+esc(explanation.whyItHappened)+'</p></div>';
+  h+='<div class="insp-sec"><div class="insp-t">'+icon('cpu','s35')+'<span>3. Underlying Mechanism</span></div><p class="insp-p mono">'+esc(explanation.underlyingMechanism)+'</p></div>';
+  h+='<div class="insp-sec"><div class="insp-t">'+icon('trup','s35')+'<span>4. Performance & Consequences</span></div><p class="insp-p">'+esc(explanation.consequences)+'</p></div>';
+  h+='</div></div>';
+  document.getElementById('insp-root').innerHTML=h;
+}
+
+/* =====================================================================
+   RENDER: MODALS
+===================================================================== */
+function renderModals(){
+  /* Comparison */
+  var ch='';
+  if(S.isComparisonOpen){
+    var metrics=S.activeTopic.metrics;
+    var lastBench=(S.benchmarkSnapshots&&S.benchmarkSnapshots.length)?S.benchmarkSnapshots[S.benchmarkSnapshots.length-1]:null;
+    var lastCust=(S.snapshots&&S.snapshots.length)?S.snapshots[S.snapshots.length-1]:null;
+    var benchMetrics=(lastBench&&lastBench.metrics)||{};
+    var custMetrics=(lastCust&&lastCust.metrics)||{};
+    var benchTitle='Default Benchmark (Canonical)';
+    var custTitle=S.mode==='CUSTOM'?'Custom Run':'Current Active Plan';
+    ch+='<div class="overlay"><div class="modal">';
+    ch+='<div class="m-hd"><div class="m-hdt">'+icon('gitcmp','s4')+'<span>Execution Comparative Analysis</span></div><button class="ico-btn" onclick="closeComparison()">'+icon('x','s4')+'</button></div>';
+    ch+='<div class="m-bd">';
+    ch+='<div class="sec-box"><span class="sec-lab">Causal Chain of Differences</span>';
+    ch+='<div class="chain"><span class="chain-chip">User Configuration / Query Delta</span>'+icon('arr','s35')+'<span class="chain-chip">Catalyst Rule Evaluation</span>'+icon('arr','s35')+'<span class="chain-chip">Physical Join & Exchange Strategy</span>'+icon('arr','s35')+'<span class="chain-chip hl">Telemetry & Runtime Latency</span></div></div>';
+    ch+='<div style="border:1px solid var(--s800);border-radius:8px;overflow:hidden;overflow-x:auto"><table class="cmp-tbl"><thead><tr><th>Metric</th><th style="text-align:right">'+esc(benchTitle)+'</th><th style="text-align:right">'+esc(custTitle)+'</th><th style="text-align:right">Variance</th><th style="text-align:center">Status</th></tr></thead><tbody>';
+    metrics.forEach(function(m){
+      var bVal=benchMetrics[m.id]!=null?benchMetrics[m.id]:0;
+      var cVal=custMetrics[m.id]!=null?custMetrics[m.id]:0;
+      var diff=cVal-bVal;
+      var pct=bVal!==0?Math.round((diff/bVal)*100):(cVal>0?100:0);
+      var lowerIsBetter=['estimatedLatencyMs','shuffleVolumeMB','shuffleExchanges','projectedMemoryMB','scannedRows'].indexOf(m.id)!==-1;
+      var isImprovement=lowerIsBetter?diff<0:diff>0;
+      ch+='<tr><td class="cmp-m"><div class="n">'+esc(m.label)+'</div>'+(m.unit?'<div class="u">'+esc(m.unit)+'</div>':'')+'</td>';
+      ch+='<td class="cmp-b">'+fmt(bVal)+'</td>';
+      ch+='<td class="cmp-c">'+fmt(cVal)+'</td>';
+      ch+='<td class="cmp-v">'+(diff===0?'<span style="color:var(--s500)">0% (Equal)</span>':'<span style="color:'+(isImprovement?'var(--em4)':'var(--am4)')+'">'+(diff>0?'+'+pct+'%':pct+'%')+'</span>')+'</td>';
+      ch+='<td class="cmp-s">'+(diff===0?'<span class="pill pill-unc">Unchanged</span>':isImprovement?'<span class="pill pill-imp">'+icon('trdn','s3')+' Improved</span>':'<span class="pill pill-reg">'+icon('trup','s3')+' Regression</span>')+'</td></tr>';
+    });
+    ch+='</tbody></table></div>';
+    ch+='<div class="sec-box" style="font-size:12px;line-height:1.5;color:var(--s300)"><strong style="color:var(--cy3);font-family:ui-monospace,monospace;display:block;margin-bottom:4px">Optimizer Observation:</strong>Comparing the execution profiles reveals how parameter and query alterations shift the underlying execution plan. When data sizes or broadcast thresholds are altered, Catalyst either avoids network shuffles completely (BroadcastHashJoin) or inserts ShuffleExchange partitions (SortMergeJoin).</div>';
+    ch+='</div>';
+    ch+='<div class="m-ft"><button class="btn-dark" onclick="closeComparison()">Close Comparison</button></div>';
+    ch+='</div></div>';
+  }
+  document.getElementById('cmp-root').innerHTML=ch;
+  /* Docs */
+  var dh='';
+  if(S.isDocsOpen){
+    var docs=S.activeTopic.docs;
+    dh+='<div class="overlay"><div class="modal">';
+    dh+='<div class="m-hd"><div class="m-hdt">'+icon('book','s4')+'<span>Catalyst Architectural Guide: '+esc(S.activeTopic.name)+'</span></div><button class="ico-btn" onclick="closeDocs()">'+icon('x','s4')+'</button></div>';
+    dh+='<div class="m-bd">';
+    dh+='<div class="sec-box"><span class="sec-lab">1. System Overview</span><p style="color:var(--s300)">'+esc(docs.overview)+'</p></div>';
+    dh+='<div class="sec-box"><span class="sec-lab ind">2. The 4 Catalyst Optimization Phases</span><div class="doc-grid" style="margin-top:8px">';
+    dh+='<div class="doc-cell"><b style="color:var(--cy3)">Phase 1: Analysis</b><p>Resolves <code>UnresolvedRelation</code> and <code>UnresolvedAttribute</code> nodes using the Spark SessionCatalog, attaching verifiable types and unique Expression IDs.</p></div>';
+    dh+='<div class="doc-cell"><b style="color:var(--em3)">Phase 2: Logical Optimization</b><p>Executes rule batches (RBO) via fixed-point iterations. Pushes filter predicates to scans, prunes unused columns, folds static constant math, and propagates nulls.</p></div>';
+    dh+='<div class="doc-cell"><b style="color:var(--pu3)">Phase 3: Physical Planning</b><p>Transforms logical relations into executable <code>SparkPlan</code> operators. Evaluates join strategies (BroadcastHashJoin vs SortMergeJoin) and inserts Shuffle Exchanges.</p></div>';
+    dh+='<div class="doc-cell"><b style="color:var(--am3)">Phase 4: Whole-Stage Codegen</b><p>Project Tungsten synthesizes unified Java classes and compiles them in-memory using Janino, eliminating virtual method invocations and pipelining rows in CPU registers.</p></div>';
+    dh+='</div></div>';
+    dh+='<div class="sec-box"><span class="sec-lab">3. Key Engineering Concepts</span><div style="margin-top:6px">';
+    docs.importantConcepts.forEach(function(c){dh+='<div class="concept-li">'+icon('check','s35')+'<span>'+esc(c)+'</span></div>';});
+    dh+='</div></div>';
+    dh+='<div class="sec-box"><span class="sec-lab em">4. Performance Tuning & Best Practices</span><p style="color:var(--s300)">'+esc(docs.performanceImplications)+'</p></div>';
+    dh+='<div class="fid-note"><strong style="display:block;margin-bottom:2px;font-family:ui-monospace,monospace;color:#c7d2fe">Simulation Fidelity Notice:</strong>'+esc(docs.simulationNotes)+'</div>';
+    dh+='</div>';
+    dh+='<div class="m-ft"><button class="btn-solid" onclick="closeDocs()">Got It</button></div>';
+    dh+='</div></div>';
+  }
+  document.getElementById('docs-root').innerHTML=dh;
+}
+
+/* =====================================================================
+   RENDER ORCHESTRATION
+===================================================================== */
+function renderAll(){renderHeader();renderDeck();renderWorkbench();layoutRowA();renderParams();renderViz();renderTelemetry();renderTimeline();renderInspector();renderModals();}
+function renderDynamic(){renderHeader();renderDeck();renderWorkbench();renderViz();renderTelemetry();renderTimeline();renderInspector();if(S.isComparisonOpen)renderModals();}
+
+/* =====================================================================
+   GLOBAL KEYBOARD CONTROLS
+===================================================================== */
+document.addEventListener('keydown',function(e){
+  var tag=document.activeElement?document.activeElement.tagName:'';
+  if(tag==='TEXTAREA'||tag==='INPUT'||tag==='SELECT')return;
+  if(e.code==='Space'){e.preventDefault();if(S.status==='running')handlePause();else handlePlay();}
+  else if(e.key==='ArrowRight'){e.preventDefault();nextStep();}
+  else if(e.key==='ArrowLeft'){e.preventDefault();prevStep();}
+  else if(e.key.toLowerCase()==='r'){e.preventDefault();resetPlay();}
+});
+document.addEventListener('keydown',function(e){
+  if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();executeCustom();}
+});
+document.addEventListener('click',function(e){
+  if((S.topicDD||S.presetDD)&&(!e.target.closest||!e.target.closest('.dd-wrap'))){closeDropdowns();}
+});
+document.getElementById('ed-ta')&&document.getElementById('ed-ta').addEventListener('input',function(){S.editCode=this.value;});
+document.addEventListener('input',function(e){
+  if(e.target&&e.target.id==='ed-ta'){
+    S.editCode=e.target.value;
+    S._taSel={s:e.target.selectionStart,e:e.target.selectionEnd};
+    var g=e.target.parentNode.querySelector('.gutter');
+    if(g){var n=e.target.value.split('\n').length;var cur=g.childElementCount;
+      if(n!==cur){var html='';for(var i=1;i<=n;i++)html+='<div>'+i+'</div>';g.innerHTML=html;}}
+  }
+});
+
+/* =====================================================================
+   INIT
+===================================================================== */
+selectTopic(SIMULATION_TOPICS[0].id);
+</script>
+</body>
+</html>
