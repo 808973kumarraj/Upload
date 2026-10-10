@@ -7,44 +7,31 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      max-width: 1000px;
-      margin: 20px auto;
       padding: 16px;
       line-height: 1.6;
-      background: #f5f5f5;
-      color: #222;
-    }
-    h1 {
       overflow-wrap: anywhere;
     }
     pre {
       white-space: pre-wrap;
       overflow-wrap: anywhere;
-      background: white;
-      padding: 16px;
-      border-radius: 8px;
-      border: 1px solid #ddd;
+      font-size: 14px;
     }
   </style>
 </head>
 <body>
-  <h1>Uploaded Text</h1>
   <pre id="content">Loading text...</pre>
-
   <script>
-    fetch('./context.txt')
+    fetch('https://raw.githubusercontent.com/808973kumarraj/Upload/main/context.txt')
       .then(response => {
-        if (!response.ok) {
-          throw new Error('Unable to load text file');
-        }
+        if (!response.ok) throw new Error('Cannot load text');
         return response.text();
       })
       .then(text => {
         document.getElementById('content').textContent = text;
       })
-      .catch(() => {
+      .catch(error => {
         document.getElementById('content').textContent =
-          'Text file not found. Check that context.txt is in the repository root.';
+          'Unable to load the text. Please refresh the page.';
       });
   </script>
 </body>
