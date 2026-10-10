@@ -11,28 +11,55 @@ permissions:
   pages: write
   id-token: write
 
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract ZIP
+      - name: Find and Extract ZIP
         run: |
           mkdir -p public
-          unzip -o 'Transfer_1__(1).zip' -d public
-          touch public/.nojekyll
-          echo '<meta http-equiv="refresh" content="0;url=./">' > public/redirect.html
 
-      - name: Configure Pages
+          ZIP=$(find . -maxdepth 1 -type f -iname '*.zip' | head -n 1)
+
+          if [ -z "$ZIP" ]; then
+            echo "ERROR: No ZIP file found in repository root."
+            exit 1
+          fi
+
+          echo "Extracting: $ZIP"
+          unzip -o "$ZIP" -d public
+
+          touch public/.nojekyll
+
+          echo "Extracted files:"
+          find public -maxdepth 3 -type f | head -100
+
+      - name: Prepare Website
+        run: |
+          if [ -f public/index.html ]; then
+            echo "Website entry point found."
+          else
+            echo "ERROR: index.html not found at public/index.html."
+            echo "The ZIP may contain source code that requires a build."
+            find public -maxdepth 3 -type f | head -100
+            exit 1
+          fi
+
+      - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload artifact
+      - name: Upload Website Artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: public
 
-      - name: Deploy to GitHub Pages
-        id: deployment
+      - name: Deploy Website
         uses: actions/deploy-pages@v4
