@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spark Caterpillar Optimizer Simulator</title>
+    <style>
+        :root {
+            --bg-primary: #0f0f1a;
+            --bg-secondary: #1a1a2e;
+            --bg-tertiary: #16213e;
+            --accent-cyan: #00d4ff;
+            --accent-green: #00ff88;
+            --accent-orange: #ff8c00;
+            --accent-red: #ff4757;
+            --accent-purple: #a855f7;
+            --text-primary: #e8e8f0;
+            --text-secondary: #8892b0;
+            --text-muted: #4a5568;
+            --border-color: #2d3748;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+        }
+        #root { height: 100vh; display: flex; flex-direction: column; }
+        
+        .header {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            border-bottom: 1px solid var(--border-color);
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+        .header .logo { display: flex; align-items: center; gap: 10px; }
+        .header .logo h1 {
+            font-size: 16px;
+            font-weight: 700;
+            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-green));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .badge { background: var(--accent-purple); color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+        
+        .tour-selector { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .tour-selector select, .tour-selector button {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .tour-selector select:hover, .tour-selector button:hover { border-color: var(--accent-cyan); }
+        
+        .main-layout { display: flex; flex: 1; overflow: hidden; }
+        .sidebar {
+            width: 320px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            overflow-y: auto;
+        }
+        .sidebar-section { padding: 12px; border-bottom: 1px solid var(--border-color); }
+        .sidebar-section h3 {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+        }
+        .param-panel { display: flex; flex-direction: column; gap: 8px; }
+        .param-item { display: flex; flex-direction: column; gap: 4px; }
+        .param-item label { font-size: 11px; color: var(--text-secondary); display: flex; justify-content: space-between; }
+        .param-item input, .param-item select {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+        }
+        .param-item input:focus, .param-item select:focus { outline: none; border-color: var(--accent-cyan); }
+        
+        .code-editor {
+            background: #0d1117;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: var(--text-primary);
+            padding: 12px;
+            resize: none;
+            width: 100%;
+            min-height: 150px;
+            line-height: 1.5;
+        }
+        .code-editor:focus { outline: none; border-color: var(--accent-cyan); }
+        
+        .workflow-canvas { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            flex-shrink: 0;
+            flex-wrap: wrap;
+        }
+        .toolbar-btn {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            font-family: inherit;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .toolbar-btn:hover { border-color: var(--accent-cyan); background: rgba(0, 212, 255, 0.1); }
+        .toolbar-btn.active { background: var(--accent-cyan); color: #000; border-color: var(--accent-cyan); }
+        .toolbar-btn.play { background: var(--accent-green); color: #000; border-color: var(--accent-green); font-weight: 600; }
+        .toolbar-btn.play:hover { background: #00ff99; }
+        .toolbar-btn.danger { background: var(--accent-red); color: white; border-color: var(--accent-red); }
+        
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 6px 16px;
+            background: var(--bg-tertiary);
+            font-size: 11px;
+            color: var(--text-secondary);
+            flex-shrink: 0;
+            flex-wrap: wrap;
+        }
+        .status-indicator { display: flex; align-items: center; gap: 6px; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-green); animation: pulse 2s infinite; }
+        .status-dot.error { background: var(--accent-red); }
+        .status-dot.idle { background: var(--text-muted); animation: none; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        
+        .timeline {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .timeline-entry {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            background: var(--bg-tertiary);
+            border-left: 3px solid var(--border-color);
+            animation: slideIn 0.3s ease;
+        }
+        .timeline-entry.success { border-left-color: var(--accent-green); }
+        .timeline-entry.error { border-left-color: var(--accent-red); }
+        .timeline-entry.info { border-left-color: var(--accent-cyan); }
+        .timeline-entry.warning { border-left-color: var(--accent-orange); }
+        .timeline-entry .step-num {
+            background: var(--accent-cyan);
+            color: #000;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+        .timeline-entry .content { flex: 1; }
+        .timeline-entry .content .label { color: var(--text-secondary); font-size: 10px; }
+        .timeline-entry .content .detail { color: var(--text-primary); margin-top: 2px; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .docs-panel {
+            width: 350px;
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            overflow-y: auto;
+        }
+        .docs-content {
+            padding: 16px;
+            font-size: 12px;
+            line-height: 1.6;
+            color: var(--text-secondary);
+        }
+        .docs-content h3 { color: var(--accent-cyan); margin-bottom: 8px; font-size: 14px; }
+        .docs-content p { margin-bottom: 8px; }
+        .docs-content code {
+            background: var(--bg-tertiary);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: var(--accent-green);
+        }
+        
+        .validation-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+        .validation-badge.valid { background: rgba(0, 255, 136, 0.15); color: var(--accent-green); }
+        .validation-badge.invalid { background: rgba(255, 71, 87, 0.15); color: var(--accent-red); }
+        
+        .composition-panel {
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            padding: 12px;
+            margin-top: 8px;
+        }
+        .composition-panel h4 { font-size: 12px; color: var(--accent-purple); margin-bottom: 8px; }
+        
+        .plan-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+            font-family: 'Courier New', monospace;
+        }
+        .plan-table th {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            padding: 6px 8px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+        .plan-table td {
+            padding: 4px 8px;
+            border-bottom: 1px solid rgba(45, 55, 72, 0.5);
+            color: var(--text-secondary);
+        }
+        .plan-table tr:hover td { background: rgba(0, 212, 255, 0.05); }
+        
+        .error-list {
+            background: rgba(255, 71, 87, 0.1);
+            border: 1px solid rgba(255, 71, 87, 0.3);
+            border-radius: 6px;
+            padding: 10px;
+            margin-top: 8px;
+        }
+        .error-list h4 { color: var(--accent-red); font-size: 12px; margin-bottom: 6px; }
+        .error-list li { font-size: 11px; color: var(--accent-red); margin-left: 16px; margin-bottom: 3px; }
+        
+        .code-block {
+            background: #0d1117;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+        
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 200px;
+            color: var(--text-muted);
+            font-size: 14px;
+            gap: 12px;
+        }
+        .empty-state .icon { font-size: 48px; opacity: 0.5; }
+        
+        .flex-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .mt-4 { margin-top: 4px; }
+        .mt-8 { margin-top: 8px; }
+        .mt-12 { margin-top: 12px; }
+        .mb-4 { margin-bottom: 4px; }
+        .mb-8 { margin-bottom: 8px; }
+        .text-sm { font-size: 12px; }
+        .text-xs { font-size: 11px; }
+        .text-mono { font-family: 'Courier New', monospace; }
+        .text-secondary { color: var(--text-secondary); }
+        .text-green { color: var(--accent-green); }
+        .text-cyan { color: var(--accent-cyan); }
+        .text-red { color: var(--accent-red); }
+        .text-orange { color: var(--accent-orange); }
+        .text-purple { color: var(--accent-purple); }
+        .font-bold { font-weight: 700; }
+        .w-full { width: 100%; }
+        
+        .tour-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 20px;
+            padding: 40px;
+        }
+        .tour-overlay h2 {
+            font-size: 28px;
+            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-green));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .tour-overlay p {
+            font-size: 16px;
+            color: var(--text-secondary);
+            max-width: 600px;
+            text-align: center;
+            line-height: 1.6;
+        }
+        .tour-overlay .step-indicator {
+            font-size: 14px;
+            color: var(--accent-cyan);
+        }
+        .tour-overlay button {
+            background: var(--accent-cyan);
+            color: #000;
+            border: none;
+            padding: 12px 32px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .tour-overlay button.sec {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+        
+        .hidden { display: none !important; }
+        
+        @media (max-width: 1024px) {
+            .sidebar { width: 260px; }
+            .docs-panel { width: 280px; }
+        }
+        @media (max-width: 768px) {
+            .main-layout { flex-direction: column; }
+            .sidebar { width: 100%; max-height: 40vh; border-right: none; border-bottom: 1px solid var(--border-color); }
+            .docs-panel { width: 100%; max-height: 30vh; border-left: none; border-top: 1px solid var(--border-color); }
+            .toolbar { flex-wrap: wrap; }
+            .header { flex-direction: column; align-items: flex-start; }
+        }
+        
+        .content { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; }
+        .card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; }
+        .card h2, .card h3 { margin-bottom: 8px; color: var(--accent-cyan); }
+        .btn { background: var(--accent-cyan); color: #071018; border: 1px solid var(--accent-cyan); padding: 8px 12px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; }
+        .btn:hover { filter: brightness(1.1); }
+        .btn.sec { background: var(--bg-tertiary); color: var(--text-primary); border-color: var(--border-color); }
+        .btn-green { background: var(--accent-green); border-color: var(--accent-green); }
+        .txt-center { text-align: center; }
+        .txt-sm { font-size: 14px; }
+        .running { background: var(--accent-orange); }
+        .status-bar .status-dot { display: inline-block; }
+        .status-bar .status-indicator { display: none; }
+        .main-layout > .workflow-canvas { min-width: 0; }
+        @media (max-width: 768px) {
+            body { height: auto; min-height: 100vh; width: 100%; overflow: auto; }
+            #root { min-height: 100vh; height: auto; }
+            .main-layout { overflow: visible; }
+            .workflow-canvas { min-height: 55vh; overflow: visible; }
+            .content { overflow: visible; }
+            .timeline { max-height: 180px; }
+            .sidebar { max-height: none; overflow: visible; }
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-primary); }
+        ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script>
+        // Initialize state
+        var S = {
+            activeTour: null,
+            activePreset: 'default',
+            isDocsOpen: false,
+            isCompositionOpen: false,
+            mode: 'DEFAULT',
+            status: 'idle',
+            currentStep: 0,
+            codeState: 'DEFAULT',
+            validationResult: { isValid: true, issues: [] },
+            params: { selectivity: 15, useIndexScan: true, useSort: false, useHashAgg: false, parallelDegree: 1, batchSize: 100 },
+            steps: [],
+            timeline: [],
+            autoPlayInterval: null,
+            isPlaying: false
+        };
+        
+        // Presets
+        var PRESETS = {
+            'default': { id: 'default', name: 'Default Plan', code: 'DEFAULT', params: { selectivity: 15, useIndexScan: true, useSort: false, useHashAgg: false, parallelDegree: 1, batchSize: 100 } },
+            'index_scan': { id: 'index_scan', name: 'Index Scan (B-Tree)', code: 'INDEX_SCAN', params: { selectivity: 5, useIndexScan: true, useSort: true, useHashAgg: false, parallelDegree: 4, batchSize: 500 } },
+            'hash_join': { id: 'hash_join', name: 'Hash Join Optimizer', code: 'HASH_JOIN', params: { selectivity: 50, useIndexScan: false, useSort: false, useHashAgg: true, parallelDegree: 8, batchSize: 1000 } }
+        };
+        
+        // Tours
+        var TOURS = [
+            { 
+                id: 'tour_intro', 
+                name: 'Introduction Tour', 
+                steps: [
+                    { title: 'Welcome', text: 'Welcome to the Spark Catalyst Optimizer Simulator. Interactive visual simulator for the Apache Spark Catalyst query optimizer.' },
+                    { title: 'User Interface', text: 'Left panel: parameters, code editor, documentation. Center: workflow canvas with toolbar, status bar, content, timeline.' },
+                    { title: 'Controls', text: 'Use toolbar buttons to play, pause, reset, or step through optimization plans.' }
+                ]
+            },
+            { 
+                id: 'tour_advanced', 
+                name: 'Advanced Features', 
+                steps: [
+                    { title: 'Parameter Tuning', text: 'Adjust selectivity, parallel degree, and other parameters to see how plans change.' },
+                    { title: 'Code Editor', text: 'Write custom Spark SQL queries and see how the optimizer processes them.' },
+                    { title: 'Timeline Analysis', text: 'The timeline tracks each execution step with detailed cost metrics.' }
+                ]
+            }
+        ];
+        
+        // Step names
+        var STEP_NAMES = ['Parse Query', 'Analyze Schema', 'Generate Plan', 'Optimize Joins', 'Estimate Cost', 'Execute Plan', 'Cache Results', 'Return Output'];
+        
+        // DOM Helper
+        function $(sel) { return document.querySelector(sel); }
+        
+        function h(tag, attrs) {
+            var e = document.createElement(tag);
+            for (var k in attrs) {
+                if (k === 'className') e.className = attrs[k];
+                else if (k === 'style' && typeof attrs[k] === 'object') Object.assign(e.style, attrs[k]);
+                else if (k.indexOf('on') === 0 && typeof attrs[k] === 'function') e.addEventListener(k.slice(2).toLowerCase(), attrs[k]);
+                else if (k === 'textContent') e.textContent = attrs[k];
+                else if (k === 'html') e.innerHTML = attrs[k];
+                else if (k in e) {
+                    try { e[k] = attrs[k]; } catch (_) { e.setAttribute(k, attrs[k]); }
+                } else e.setAttribute(k, attrs[k]);
+            }
+            var args = Array.prototype.slice.call(arguments, 2);
+            args.forEach(function(c) {
+                if (typeof c === 'string') e.appendChild(document.createTextNode(c));
+                else if (c) e.appendChild(c);
+            });
+            return e;
+        }
+        
+        // Engine functions
+        function genSteps() {
+            var n = 3 + Math.floor(Math.random() * 4);
+            var steps = [];
+            for (var i = 0; i < n; i++) {
+                steps.push({ 
+                    step: i + 1, 
+                    code: STEP_NAMES[i % STEP_NAMES.length], 
+                    cost: Math.floor(Math.random() * 500) + 10, 
+                    status: i < n - 1 ? 'completed' : 'active', 
+                    mode: 'DEFAULT', 
+                    details: 'Step ' + (i + 1) 
+                });
+            }
+            return steps;
+        }
+        
+        function addTimelineEvent(type, label, detail) {
+            S.timeline.push({
+                type: type,
+                label: label,
+                detail: detail,
+                time: new Date().toLocaleTimeString(),
+                step: S.timeline.length + 1
+            });
+        }
+        
+        function setActiveTour(tourId) {
+            var tour = null;
+            for (var i = 0; i < TOURS.length; i++) {
+                if (TOURS[i].id === tourId) { tour = TOURS[i]; break; }
+            }
+            if (!tour) return;
+            
+            S.activeTour = tour;
+            S.activeTourData = tour;
+            S.currentStep = 0;
+            S.steps = [];
+            S.timeline = [];
+            S.events = [];
+            S.isPlaying = false;
+            
+            S.activePreset = 'default';
+            S.params = { selectivity: 15, useIndexScan: true, useSort: false, useHashAgg: false, parallelDegree: 1, batchSize: 100 };
+            S.codeState = 'DEFAULT';
+            render();
+        }
+        
+        function setActivePreset(presetId) {
+            var preset = PRESETS[presetId];
+            if (!preset) return;
+            
+            S.activePreset = presetId;
+            S.params = {
+                selectivity: preset.params.selectivity,
+                useIndexScan: preset.params.useIndexScan,
+                useSort: preset.params.useSort,
+                useHashAgg: preset.params.useHashAgg,
+                parallelDegree: preset.params.parallelDegree,
+                batchSize: preset.params.batchSize
+            };
+            S.codeState = preset.code;
+            S.steps = genSteps();
+            S.currentStep = 0;
+            S.status = 'idle';
+            
+            addTimelineEvent('info', 'Preset Changed', 'Loaded preset: ' + preset.name);
+            render();
+        }
+        
+        function handleParamChange(id, value) {
+            S.params[id] = value;
+            render();
+        }
+        
+        function handleResetToDefault() {
+            if (!S.activePreset) return;
+            var p = PRESETS[S.activePreset].params;
+            S.params = {
+                selectivity: p.selectivity,
+                useIndexScan: p.useIndexScan,
+                useSort: p.useSort,
+                useHashAgg: p.useHashAgg,
+                parallelDegree: p.parallelDegree,
+                batchSize: p.batchSize
+            };
+            addTimelineEvent('info', 'Reset', 'Parameters reset to defaults');
+            render();
+        }
+        
+        function handleNextStep() {
+            if (S.currentStep >= S.steps.length - 1) {
+                S.status = 'completed';
+                addTimelineEvent('success', 'Complete', 'All steps executed');
+                render();
+                return;
+            }
+            S.currentStep++;
+            setStep(S.currentStep);
+            render();
+        }
+        
+        function handlePrevStep() {
+            if (S.currentStep > 0) {
+                S.currentStep--;
+                setStep(S.currentStep);
+                render();
+            }
+        }
+        
+        function handleReset() {
+            S.currentStep = 0;
+            S.status = 'idle';
+            S.isPlaying = false;
+            S.steps = genSteps();
+            if (S.autoPlayInterval) clearInterval(S.autoPlayInterval);
+            S.autoPlayInterval = null;
+            setStep(0);
+            render();
+        }
+        
+        function handlePlay() {
+            if (S.status === 'running') {
+                S.status = 'paused';
+                if (S.autoPlayInterval) clearInterval(S.autoPlayInterval);
+                S.autoPlayInterval = null;
+                render();
+                return;
+            }
+            if (S.status === 'paused') {
+                startAutoPlay();
+                return;
+            }
+            S.status = 'running';
+            S.isPlaying = true;
+            startAutoPlay();
+            render();
+        }
+        
+        function startAutoPlay() {
+            if (S.autoPlayInterval) clearInterval(S.autoPlayInterval);
+            S.autoPlayInterval = setInterval(function() {
+                if (S.currentStep >= S.steps.length - 1) {
+                    clearInterval(S.autoPlayInterval);
+                    S.autoPlayInterval = null;
+                    S.status = 'completed';
+                    S.isPlaying = false;
+                    addTimelineEvent('success', 'Plan Complete', 'All optimization steps finished');
+                    render();
+                    return;
+                }
+                S.currentStep++;
+                setStep(S.currentStep);
+                render();
+            }, 800);
+        }
+        
+        function handleCollapseToEditSpace() {
+            S.isCompositionOpen = !S.isCompositionOpen;
+            render();
+        }
+        
+        function handleCodeChange(value) {
+            S.codeState = value;
+            render();
+        }
+        
+        function handleExecuteCustom() {
+            if (!S.codeState.trim()) {
+                addTimelineEvent('error', 'Error', 'Empty query');
+                render();
+                return;
+            }
+            S.status = 'running';
+            S.isPlaying = true;
+            addTimelineEvent('info', 'Execution Started', 'Running: ' + S.codeState.substring(0, 50) + '...');
+            render();
+            
+            setTimeout(function() {
+                S.status = 'completed';
+                S.isPlaying = false;
+                S.currentStep = Math.max(S.currentStep, S.steps.length - 1);
+                addTimelineEvent('success', 'Execution Complete', 'Custom query executed successfully');
+                setStep(S.currentStep);
+                render();
+            }, 2000);
+        }
+        
+        function handleCollapseToEditSpace2() {
+            S.isDocsOpen = !S.isDocsOpen;
+            render();
+        }
+        
+        function handleTourAction(action) {
+            if (!S.activeTour || !S.activeTour.steps) return;
+            
+            if (action === 'next' && S.currentStep < S.activeTour.steps.length - 1) {
+                S.currentStep++;
+                addTimelineEvent('info', 'Tour Step', S.activeTour.steps[S.currentStep].title);
+            } else if (action === 'prev' && S.currentStep > 0) {
+                S.currentStep--;
+            } else if (action === 'close') {
+                S.activeTour = null;
+                S.activeTourData = null;
+            }
+            
+            setStep(S.currentStep);
+            render();
+        }
+        
+        function setStep(step) {
+            S.currentStep = step;
+        }
+        
+        function getSteps(tourId, mode) {
+            return S.steps || [];
+        }
+        
+        // Render functions
+        function render() {
+            var root = $('#root');
+            if (!root) return;
+            root.innerHTML = '';
+            root.appendChild(buildApp());
+        }
+        
+        function buildApp() {
+            var root = h('div');
+            
+            // Header
+            var header = h('div', { className: 'header' });
+            var logo = h('div', { className: 'logo' });
+            logo.appendChild(h('h1', { textContent: 'Spark Catalyst Optimizer Simulator' }));
+            logo.appendChild(h('span', { className: 'badge', textContent: 'SIM' }));
+            header.appendChild(logo);
+            
+            var tourSel = h('div', { className: 'tour-selector' });
+            var sel = h('select');
+            sel.appendChild(h('option', { textContent: '-- Select Tour --', value: '' }));
+            TOURS.forEach(function(t) {
+                var o = h('option', { value: t.id, textContent: t.name });
+                if (S.activeTour && S.activeTour.id === t.id) o.selected = true;
+                sel.appendChild(o);
+            });
+            sel.onchange = function() {
+                if (this.value) setActiveTour(this.value);
+            };
+            tourSel.appendChild(sel);
+            
+            if (S.activeTour && S.activeTour.steps) {
+                tourSel.appendChild(h('span', { className: 'text-sm text-cyan', textContent: 'Step ' + (S.currentStep + 1) + '/' + S.activeTour.steps.length }));
+            }
+            header.appendChild(tourSel);
+            
+            var vb = S.validationResult.isValid ?
+                h('span', { className: 'validation-badge valid', textContent: 'Valid' }) :
+                h('span', { className: 'validation-badge invalid', textContent: 'Errors' });
+            header.appendChild(h('div', { className: 'flex-row' }, [vb]));
+            
+            root.appendChild(header);
+            
+            // Main Layout
+            var main = h('div', { className: 'main-layout' });
+            
+            // Sidebar
+            var sb = h('div', { className: 'sidebar' });
+            
+            // Tour Steps
+            if (S.activeTour && S.activeTour.steps) {
+                var sec = h('div', { className: 'sidebar-section' });
+                sec.appendChild(h('h3', { textContent: 'Tour Steps' }));
+                S.activeTour.steps.forEach(function(s, i) {
+                    var d = h('div', { 
+                        className: 'text-xs ' + (i === S.currentStep ? 'text-green' : 'text-secondary'),
+                        textContent: (i + 1) + '. ' + s.title,
+                        style: { padding: '3px 0', cursor: 'pointer', borderLeft: i === S.currentStep ? '2px solid #00ff88' : '2px solid transparent', paddingLeft: '6px' }
+                    });
+                    (function(idx) {
+                        d.onclick = function() { S.currentStep = idx; setStep(idx); render(); };
+                    })(i);
+                    sec.appendChild(d);
+                });
+                sb.appendChild(sec);
+            }
+            
+            // Preset
+            var sec2 = h('div', { className: 'sidebar-section' });
+            sec2.appendChild(h('h3', { textContent: 'Preset' }));
+            var ps = h('select');
+            Object.keys(PRESETS).forEach(function(pk) {
+                var o = h('option', { value: pk, textContent: PRESETS[pk].name });
+                if (S.activePreset === pk) o.selected = true;
+                ps.appendChild(o);
+            });
+            ps.onchange = function() { setActivePreset(this.value); };
+            sec2.appendChild(ps);
+            sec2.appendChild(h('button', { className: 'btn mt-8', textContent: 'Reset to Default', onclick: function() { handleResetToDefault(); } }));
+            sb.appendChild(sec2);
+            
+            // Parameters
+            var sec3 = h('div', { className: 'sidebar-section' });
+            sec3.appendChild(h('h3', { textContent: 'Parameters' }));
+            var pp = h('div', { className: 'param-panel' });
+            
+            var pr = h('div', { className: 'param-item' });
+            pr.appendChild(h('label', { textContent: 'Selectivity %: ' + S.params.selectivity }));
+            var rs = h('input', { type: 'range', min: 1, max: 100, value: S.params.selectivity, style: { width: '100px' } });
+            rs.oninput = function() {
+                this.parentNode.querySelector('label').textContent = 'Selectivity %: ' + this.value;
+                S.params.selectivity = parseInt(this.value);
+            };
+            pr.appendChild(rs);
+            pp.appendChild(pr);
+            
+            var ci = h('div', { className: 'param-item' });
+            ci.appendChild(h('label', { textContent: 'Use Index Scan' }));
+            var ic = h('input', { type: 'checkbox', checked: S.params.useIndexScan });
+            ic.onchange = function() { S.params.useIndexScan = this.checked; };
+            ci.appendChild(ic);
+            pp.appendChild(ci);
+            
+            var cs = h('div', { className: 'param-item' });
+            cs.appendChild(h('label', { textContent: 'Use Sort' }));
+            var sc = h('input', { type: 'checkbox', checked: S.params.useSort });
+            sc.onchange = function() { S.params.useSort = this.checked; };
+            cs.appendChild(sc);
+            pp.appendChild(cs);
+            
+            var ch = h('div', { className: 'param-item' });
+            ch.appendChild(h('label', { textContent: 'Use Hash Agg' }));
+            var hc = h('input', { type: 'checkbox', checked: S.params.useHashAgg });
+            hc.onchange = function() { S.params.useHashAgg = this.checked; };
+            ch.appendChild(hc);
+            pp.appendChild(ch);
+            
+            var cp = h('div', { className: 'param-item' });
+            cp.appendChild(h('label', { textContent: 'Parallel Degree: ' + S.params.parallelDegree }));
+            var rp = h('input', { type: 'range', min: 1, max: 16, value: S.params.parallelDegree, style: { width: '100px' } });
+            rp.oninput = function() {
+                this.parentNode.querySelector('label').textContent = 'Parallel Degree: ' + this.value;
+                S.params.parallelDegree = parseInt(this.value);
+            };
+            cp.appendChild(rp);
+            pp.appendChild(cp);
+            
+            sec3.appendChild(pp);
+            sb.appendChild(sec3);
+            
+            // Code Editor
+            var sec4 = h('div', { className: 'sidebar-section' });
+            sec4.appendChild(h('h3', { textContent: 'Code Editor' }));
+            var ta = h('textarea', { className: 'code-editor', textContent: S.codeState });
+            ta.oninput = function() { S.codeState = this.value; handleCodeChange(this.value); };
+            sec4.appendChild(ta);
+            
+            sec4.appendChild(h('button', { className: 'btn btn-green mt-8 w-full', textContent: '▶ Execute Custom Query', onclick: function() { handleExecuteCustom(); } }));
+            sb.appendChild(sec4);
+            
+            // Validation Errors
+            if (S.validationResult.issues && S.validationResult.issues.length > 0) {
+                var sec5 = h('div', { className: 'sidebar-section' });
+                var err = h('div', { className: 'error-list' });
+                err.appendChild(h('h4', { textContent: 'Issues' }));
+                S.validationResult.issues.forEach(function(issue) { err.appendChild(h('li', { textContent: issue })); });
+                sec5.appendChild(err);
+                sb.appendChild(sec5);
+            }
+            
+            // Composition
+            if (S.isCompositionOpen) {
+                var sec6 = h('div', { className: 'sidebar-section' });
+                sec6.appendChild(h('h3', { textContent: 'Composition View' }));
+                var comp = h('div', { className: 'composition-panel' });
+                comp.appendChild(h('h4', { textContent: 'Plan Composition' }));
+                var tbl = h('table', { className: 'plan-table' });
+                var thead = h('thead');
+                thead.appendChild(h('tr', {}, [
+                    h('th', { textContent: 'Step' }),
+                    h('th', { textContent: 'Mode' }),
+                    h('th', { textContent: 'Cost' })
+                ]));
+                tbl.appendChild(thead);
+                var tbody = h('tbody');
+                S.steps.forEach(function(s) {
+                    tbody.appendChild(h('tr', {}, [
+                        h('td', { textContent: '#' + s.step }),
+                        h('td', { textContent: s.mode || 'DEFAULT' }),
+                        h('td', { textContent: (s.cost || 0) + 'ms' })
+                    ]));
+                });
+                tbl.appendChild(tbody);
+                comp.appendChild(tbl);
+                sec6.appendChild(comp);
+                sb.appendChild(sec6);
+            }
+            
+            main.appendChild(sb);
+            
+            // Center Canvas
+            var canvas = h('div', { className: 'workflow-canvas' });
+            
+            // Toolbar
+            var tb = h('div', { className: 'toolbar' });
+            var pb = h('button', { 
+                className: 'toolbar-btn play' + (S.isPlaying ? ' active' : ''), 
+                textContent: S.isPlaying ? '⏸ Pause' : '▶ Play', 
+                onclick: function() { handlePlay(); }
+            });
+            tb.appendChild(pb);
+            tb.appendChild(h('span', { className: 'text-sm text-secondary', textContent: 'Step ' + (S.currentStep + 1) + '/' + S.steps.length }));
+            tb.appendChild(h('span'));
+            tb.appendChild(h('button', { className: 'toolbar-btn', textContent: '⏮', onclick: function() { handlePrevStep(); } }));
+            tb.appendChild(h('button', { className: 'toolbar-btn', textContent: '⏭', onclick: function() { handleNextStep(); } }));
+            tb.appendChild(h('span'));
+            tb.appendChild(h('button', { className: 'toolbar-btn danger', textContent: '↺ Reset', onclick: function() { handleReset(); } }));
+            if (S.activeTour) {
+                tb.appendChild(h('button', { className: 'toolbar-btn', textContent: '✕ Close Tour', onclick: function() { S.activeTour = null; S.activeTourData = null; render(); } }));
+            }
+            tb.appendChild(h('button', { className: 'toolbar-btn', textContent: S.isCompositionOpen ? '⊞ Hide Composition' : '⊞ Composition', onclick: function() { handleCollapseToEditSpace(); } }));
+            tb.appendChild(h('button', { className: 'toolbar-btn', textContent: S.isDocsOpen ? '⊞ Hide Docs' : '⊞ Docs', onclick: function() { handleCollapseToEditSpace2(); } }));
+            canvas.appendChild(tb);
+            
+            // Status Bar
+            var sbar = h('div', { className: 'status-bar' });
+            sbar.appendChild(h('div', { className: 'status-indicator' }));
+            sbar.appendChild(h('span', { className: 'status-dot ' + (S.status === 'running' ? 'running' : S.status === 'error' ? 'error' : 'idle') }));
+            sbar.appendChild(h('span', { textContent: S.status.charAt(0).toUpperCase() + S.status.slice(1) }));
+            sbar.appendChild(h('span', { className: 'text-mono', textContent: 'Step: <span>' + (S.currentStep + 1) + '</span>/<span>' + S.steps.length + '</span>' }));
+            if (S.activeTour) sbar.appendChild(h('span', { className: 'text-cyan', textContent: 'Tour: ' + S.activeTour.name }));
+            canvas.appendChild(sbar);
+            
+            // Content
+            var content = h('div', { className: 'content' });
+            
+            if (S.activeTour && S.activeTour.steps && S.currentStep < S.activeTour.steps.length) {
+                var s = S.activeTour.steps[S.currentStep];
+                var tc = h('div', { className: 'card' });
+                tc.appendChild(h('div', { className: 'text-xs text-cyan mb-8', textContent: 'Step ' + (S.currentStep + 1) + ' of ' + S.activeTour.steps.length }));
+                tc.appendChild(h('h2', { className: 'txt-sm', style: { color: '#00d4ff', fontSize: '18px', marginBottom: '8px' }, textContent: s.title }));
+                tc.appendChild(h('p', { textContent: s.text }));
+                var br = h('div', { className: 'flex-row mt-12' });
+                br.appendChild(h('button', { className: 'btn sec', textContent: '← Previous', onclick: function() { handleTourAction('prev'); } }));
+                var isLast = S.currentStep >= S.activeTour.steps.length - 1;
+                br.appendChild(h('button', { className: 'btn', textContent: isLast ? 'Finish ✓' : 'Next →', onclick: function() { handleTourAction('next'); } }));
+                br.appendChild(h('button', { className: 'btn sec', textContent: 'Skip', onclick: function() { handleTourAction('close'); } }));
+                tc.appendChild(br);
+                content.appendChild(tc);
+                if (PRESETS[S.activePreset]) {
+                    var pv = h('div', { className: 'card mt-8' });
+                    pv.appendChild(h('h3', { textContent: 'Current Configuration' }));
+                    pv.appendChild(h('div', { className: 'code-block', textContent: '-- Selectivity: ' + S.params.selectivity + '%\n-- Parallel: ' + S.params.parallelDegree + '\n-- Preset: ' + PRESETS[S.activePreset].name }));
+                    content.appendChild(pv);
+                }
+            } else if (S.steps.length === 0) {
+                content.appendChild(h('div', { className: 'empty-state', html: '<div style="font-size:48px">⚡</div><div class="font-bold">No Plan Loaded</div><div class="text-sm text-secondary">Select a preset or tour to begin.</div>' }));
+            } else {
+                var cs = S.steps[Math.min(S.currentStep, S.steps.length - 1)];
+                if (cs) {
+                    var sc = h('div', { className: 'card' });
+                    sc.appendChild(h('div', { className: 'text-xs text-cyan mb-4', textContent: 'Step ' + cs.step }));
+                    sc.appendChild(h('h2', { className: 'txt-sm', textContent: cs.code }));
+                    if (cs.cost) sc.appendChild(h('div', { className: 'text-sm mt-8', html: '<span class="text-green">Cost: ' + cs.cost + 'ms</span> | <span class="text-secondary">Status: ' + cs.status + '</span>' }));
+                    content.appendChild(sc);
+                }
+                
+                var cvd = h('div', { className: 'card mt-8' });
+                cvd.appendChild(h('h3', { textContent: 'Generated Code' }));
+                var tc = 0;
+                for (var i = 0; i < S.steps.length; i++) tc += (S.steps[i].cost || 0);
+                cvd.appendChild(h('div', { className: 'code-block', textContent: '-- Spark Optimized Query\n-- Selectivity: ' + S.params.selectivity + '%\n-- Parallel: ' + S.params.parallelDegree + '\n-- Cost: ' + tc + 'ms\n-- Steps: ' + S.steps.length }));
+                content.appendChild(cvd);
+                
+                var ptd = h('div', { className: 'card mt-8' });
+                ptd.appendChild(h('h3', { textContent: 'Execution Plan' }));
+                var tbl = h('table', { className: 'plan-table' });
+                var thead = h('thead');
+                var htr = h('tr');
+                ['Step', 'Code', 'Cost', 'Status'].forEach(function(h) { htr.appendChild(h('th', { textContent: h })); });
+                thead.appendChild(htr);
+                tbl.appendChild(thead);
+                var tbody = h('tbody');
+                S.steps.forEach(function(s) {
+                    var tr = h('tr', {});
+                    if (s.step - 1 === S.currentStep) tr.style.background = 'rgba(0, 212, 255, 0.1)';
+                    tr.appendChild(h('td', { textContent: '#' + s.step }));
+                    tr.appendChild(h('td', { textContent: s.code }));
+                    tr.appendChild(h('td', { textContent: (s.cost || 0) + 'ms' }));
+                    tr.appendChild(h('td', { textContent: s.status }));
+                    tbody.appendChild(tr);
+                });
+                tbl.appendChild(tbody);
+                ptd.appendChild(tbl);
+                content.appendChild(ptd);
+            }
+            
+            canvas.appendChild(content);
+            
+            // Timeline
+            var tl = h('div', { className: 'timeline' });
+            if (S.timeline.length === 0) {
+                tl.appendChild(h('div', { className: 'text-xs text-muted txt-center', textContent: 'No events yet. Run a plan.', style: { padding: '16px' } }));
+            } else {
+                S.timeline.slice().reverse().forEach(function(ev) {
+                    tl.appendChild(h('div', { className: 'timeline-entry ' + ev.type }, [
+                        h('div', { className: 'step-num', textContent: ev.step }),
+                        h('div', { className: 'content' }, [
+                            h('div', { className: 'label', textContent: ev.label }),
+                            h('div', { className: 'detail', textContent: ev.detail + ' [' + ev.time + ']' })
+                        ])
+                    ]));
+                });
+            }
+            canvas.appendChild(tl);
+            
+            main.appendChild(canvas);
+            
+            // Docs Panel
+            if (S.isDocsOpen) {
+                var docs = h('div', { className: 'docs-panel' });
+                var dch = h('div', { className: 'docs-content' });
+                dch.appendChild(h('h3', { textContent: 'About' }));
+                dch.appendChild(h('p', { textContent: 'Interactive visual simulator and engineering workstation for the Apache Spark Catalyst query optimizer.' }));
+                dch.appendChild(h('h3', { className: 'mt-8', textContent: 'Features' }));
+                dch.appendChild(h('p', { textContent: '• Interactive parameter tuning' }));
+                dch.appendChild(h('p', { textContent: '• Multiple preset configurations' }));
+                dch.appendChild(h('p', { textContent: '• Step-by-step execution timeline' }));
+                dch.appendChild(h('p', { textContent: '• Custom SQL query editor' }));
+                dch.appendChild(h('p', { textContent: '• Tour system for guided learning' }));
+                dch.appendChild(h('h3', { className: 'mt-8', style: { color: 'var(--accent-purple)' }, textContent: 'Composition' }));
+                dch.appendChild(h('p', { textContent: 'Break down plans into individual components.' }));
+                dch.appendChild(h('h3', { className: 'mt-8', style: { color: 'var(--accent-green)' }, textContent: 'Keyboard Shortcuts' }));
+                dch.appendChild(h('p', { textContent: '• Space: Play/Pause' }));
+                dch.appendChild(h('p', { textContent: '• → Next | ← Prev | R Reset' }));
+                docs.appendChild(dch);
+                main.appendChild(docs);
+            }
+            
+            root.appendChild(main);
+            
+            // Tour Overlay
+            if (S.activeTour && S.activeTour.steps && S.currentStep < S.activeTour.steps.length) {
+                var ov = h('div', { className: 'tour-overlay' });
+                var s = S.activeTour.steps[S.currentStep];
+                ov.appendChild(h('div', { className: 'step-indicator', textContent: 'Step ' + (S.currentStep + 1) + ' of ' + S.activeTour.steps.length }));
+                ov.appendChild(h('h2', { textContent: s.title }));
+                ov.appendChild(h('p', { textContent: s.text }));
+                var obr = h('div', { className: 'flex-row' });
+                obr.appendChild(h('button', { className: 'btn sec', textContent: '← Previous', onclick: function() { handleTourAction('prev'); } }));
+                var last = S.currentStep >= S.activeTour.steps.length - 1;
+                obr.appendChild(h('button', { textContent: last ? 'Finish' : 'Next →', onclick: function() { handleTourAction('next'); } }));
+                obr.appendChild(h('button', { className: 'btn sec', textContent: 'Skip', onclick: function() { handleTourAction('close'); } }));
+                ov.appendChild(obr);
+                root.appendChild(ov);
+            }
+            
+            return root;
+        }
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+            if (e.code === 'Space') { e.preventDefault(); handlePlay(); }
+            if (e.code === 'ArrowRight') { handleNextStep(); }
+            if (e.code === 'ArrowLeft') { handlePrevStep(); }
+            if (e.code === 'KeyR') { handleReset(); }
+        });
+        
+        // Init
+        S.steps = genSteps();
+        addTimelineEvent('info', 'App Started', 'Spark Catalyst Optimizer Simulator loaded');
+        render();
+    </script>
+</body>
+</html>
