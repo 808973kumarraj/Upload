@@ -20,62 +20,74 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: false
 
-      - name: Find and Extract ZIP
+      - name: Find and Extract Project ZIP
+        shell: bash
         run: |
           ZIP=$(find . -maxdepth 1 -type f -iname '*.zip' | head -n 1)
 
           if [ -z "$ZIP" ]; then
-            echo "ERROR: ZIP file not found"
+            echo "ERROR: Project ZIP not found."
             exit 1
           fi
 
           mkdir -p extracted
           unzip -o "$ZIP" -d extracted
 
-      - name: Find React Project
+      - name: Locate React Project
+        shell: bash
         run: |
-          PROJECT=$(find extracted -type f -name package.json -not -path '*/node_modules/*' | head -n 1)
+          PACKAGE=$(find extracted -type f -name package.json \
+            -not -path '*/node_modules/*' | head -n 1)
 
-          if [ -z "$PROJECT" ]; then
-            echo "ERROR: package.json not found"
+          if [ -z "$PACKAGE" ]; then
+            echo "ERROR: package.json not found."
             exit 1
           fi
 
-          echo "PROJECT_DIR=$(dirname "$PROJECT")" >> "$GITHUB_ENV"
+          PROJECT_DIR="$(dirname "$PACKAGE")"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+          echo "Project directory: $PROJECT_DIR"
 
       - name: Install Dependencies
-        working-directory: .
-        run: |
-          cd "$PROJECT_DIR"
-          npm install
+        run: npm install
+        working-directory: ${{ env.PROJECT_DIR }}
 
-      - name: Build React Website
-        run: |
-          cd "$PROJECT_DIR"
-          npm run build
+      - name: Build React Application
+        run: npm run build
+        working-directory: ${{ env.PROJECT_DIR }}
 
-      - name: Prepare Website
+      - name: Verify Build Output
+        shell: bash
+        run: |
+          if [ ! -f "$PROJECT_DIR/dist/index.html" ]; then
+            echo "ERROR: Build did not produce dist/index.html."
+            exit 1
+          fi
+
+          echo "Build completed successfully."
+
+      - name: Prepare GitHub Pages
         run: |
           mkdir -p public
-          cp -r "$PROJECT_DIR"/dist/. public/
+          cp -r "$PROJECT_DIR/dist/." public/
           touch public/.nojekyll
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload Website
+      - name: Upload Website Artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: public
 
-      - name: Deploy Website
+      - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
