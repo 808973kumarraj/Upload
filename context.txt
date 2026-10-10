@@ -1,0 +1,4690 @@
+=== spark-catalyst-optimizer-simulator (1) (1)/README.md ===
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
+</div>
+
+# Run and deploy your AI Studio app
+
+This contains everything you need to run your app locally.
+
+View your app in AI Studio: https://ai.studio/apps/cd6c4b7b-ce59-4106-b6df-a66169321597
+
+## Run Locally
+
+**Prerequisites:**  Node.js
+
+
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`
+
+=== spark-catalyst-optimizer-simulator (1) (1)/index.html ===
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spark Catalyst Optimizer Simulator</title>
+    <meta name="description" content="Interactive visual simulator and engineering workstation for the Apache Spark Catalyst query optimizer, physical planner, and whole-stage code generation engine." />
+    <meta property="og:title" content="Spark Catalyst Optimizer Simulator" />
+    <meta property="og:description" content="Interactive visual simulator and engineering workstation for the Apache Spark Catalyst query optimizer, physical planner, and whole-stage code generation engine." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
+=== spark-catalyst-optimizer-simulator (1) (1)/metadata.json ===
+{
+  "name": "Spark Catalyst Optimizer Simulator",
+  "description": "Interactive visual simulator and engineering workstation for the Apache Spark Catalyst query optimizer, physical planner, and whole-stage code generation engine.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/package.json ===
+{
+  "name": "react-example",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port=3000 --host=0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview",
+    "clean": "rm -rf dist server.js",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@google/genai": "^2.4.0",
+    "@tailwindcss/vite": "^4.1.14",
+    "@vitejs/plugin-react": "^5.0.4",
+    "lucide-react": "^0.546.0",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
+    "vite": "^6.2.3",
+    "express": "^4.21.2",
+    "dotenv": "^17.2.3",
+    "motion": "^12.23.24"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "autoprefixer": "^10.4.21",
+    "esbuild": "^0.25.0",
+    "tailwindcss": "^4.1.14",
+    "tsx": "^4.21.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.3",
+    "@types/express": "^4.17.21"
+  }
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/App.tsx ===
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { SIMULATION_TOPICS, getTopicById } from './topics/registry';
+import {
+  SimulationTopic,
+  ExecutionMode,
+  SimulationStatus,
+  ExplanationDepth,
+  SimulationSnapshot,
+  ValidationResult,
+  ScenarioPreset,
+} from './types/simulation';
+import { Header, WorkbenchView } from './components/Header';
+import { ControlDeck } from './components/ControlDeck';
+import { Workbench } from './components/Workbench';
+import { ParameterPanel } from './components/ParameterPanel';
+import { VisualizerRouter } from './components/VisualizerRouter';
+import { TelemetryMatrix } from './components/TelemetryMatrix';
+import { TimelineEventLog } from './components/TimelineEventLog';
+import { DeepInspector } from './components/DeepInspector';
+import { ComparisonModal } from './components/ComparisonModal';
+import { TopicDocsModal } from './components/TopicDocsModal';
+
+export default function App() {
+  // Topic state
+  const [activeTopic, setActiveTopic] = useState<SimulationTopic>(SIMULATION_TOPICS[0]);
+  const [activePreset, setActivePreset] = useState<ScenarioPreset>(activeTopic.presets[0]);
+
+  // Code state
+  const [benchmarkCode, setBenchmarkCode] = useState<string>(activeTopic.defaultCode);
+  const [editCode, setEditCode] = useState<string>(activeTopic.defaultCode);
+  const [validationResult, setValidationResult] = useState<ValidationResult>({ isValid: true, issues: [] });
+
+  // Parameters state
+  const [paramValues, setParamValues] = useState<Record<string, any>>(() => {
+    const initial: Record<string, any> = {};
+    activeTopic.parameters.forEach((p) => {
+      initial[p.id] = p.defaultValue;
+    });
+    return initial;
+  });
+
+  // UI state
+  const [activeView, setActiveView] = useState<WorkbenchView>('split');
+  const [explanationDepth, setExplanationDepth] = useState<ExplanationDepth>('technical');
+  const [isParamsOpen, setIsParamsOpen] = useState(false);
+  const [isDocsOpen, setIsDocsOpen] = useState(false);
+  const [isComparisonOpen, setIsComparisonOpen] = useState(false);
+
+  // Simulation execution state
+  const [mode, setMode] = useState<ExecutionMode>('DEFAULT');
+  const [status, setStatus] = useState<SimulationStatus>('idle');
+  const [currentStep, setCurrentStep] = useState<number>(0);
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
+
+  // Simulation plan snapshots
+  const [snapshots, setSnapshots] = useState<SimulationSnapshot[]>(() => {
+    const { steps } = activeTopic.buildExecutionPlan(activeTopic.defaultCode, {});
+    return steps;
+  });
+
+  // Baseline benchmark snapshots for comparison
+  const [benchmarkSnapshots, setBenchmarkSnapshots] = useState<SimulationSnapshot[]>(snapshots);
+
+  // Initialize or change topic
+  const handleSelectTopic = (topicId: string) => {
+    const newTopic = getTopicById(topicId);
+    setActiveTopic(newTopic);
+    const firstPreset = newTopic.presets[0];
+    setActivePreset(firstPreset);
+    setBenchmarkCode(firstPreset ? firstPreset.code : newTopic.defaultCode);
+    setEditCode(firstPreset ? firstPreset.code : newTopic.defaultCode);
+
+    const initialParams: Record<string, any> = {};
+    newTopic.parameters.forEach((p) => {
+      initialParams[p.id] = firstPreset?.parameters?.[p.id] ?? p.defaultValue;
+    });
+    setParamValues(initialParams);
+
+    const { steps } = newTopic.buildExecutionPlan(firstPreset ? firstPreset.code : newTopic.defaultCode, initialParams);
+    setSnapshots(steps);
+    setBenchmarkSnapshots(steps);
+    setCurrentStep(0);
+    setMode('DEFAULT');
+    setStatus('idle');
+  };
+
+  // Change preset scenario
+  const handleSelectPreset = (preset: ScenarioPreset) => {
+    setActivePreset(preset);
+    setBenchmarkCode(preset.code);
+    setEditCode(preset.code);
+
+    const newParams = { ...paramValues, ...(preset.parameters || {}) };
+    setParamValues(newParams);
+
+    const { steps } = activeTopic.buildExecutionPlan(preset.code, newParams);
+    setSnapshots(steps);
+    setBenchmarkSnapshots(steps);
+    setCurrentStep(0);
+    setMode('DEFAULT');
+    setStatus('idle');
+  };
+
+  // Parameter changes
+  const handleParamChange = (id: string, value: any) => {
+    const updated = { ...paramValues, [id]: value };
+    setParamValues(updated);
+
+    // Rebuild plan with updated parameters
+    const currentCode = mode === 'CUSTOM' ? editCode : benchmarkCode;
+    const { steps } = activeTopic.buildExecutionPlan(currentCode, updated);
+    setSnapshots(steps);
+    if (mode === 'DEFAULT') {
+      setBenchmarkSnapshots(steps);
+    }
+  };
+
+  const handleResetParams = () => {
+    const initialParams: Record<string, any> = {};
+    activeTopic.parameters.forEach((p) => {
+      initialParams[p.id] = activePreset?.parameters?.[p.id] ?? p.defaultValue;
+    });
+    setParamValues(initialParams);
+
+    const currentCode = mode === 'CUSTOM' ? editCode : benchmarkCode;
+    const { steps } = activeTopic.buildExecutionPlan(currentCode, initialParams);
+    setSnapshots(steps);
+  };
+
+  // Execute custom input manually (#9)
+  const handleExecuteCustom = () => {
+    const valResult = activeTopic.validate(editCode, paramValues);
+    setValidationResult(valResult);
+
+    if (!valResult.isValid) {
+      setStatus('error');
+      return;
+    }
+
+    const { steps } = activeTopic.buildExecutionPlan(editCode, paramValues);
+    setSnapshots(steps);
+    setMode('CUSTOM');
+    setCurrentStep(0);
+    setStatus('paused');
+  };
+
+  // Copy benchmark to edit space (#6)
+  const handleCopyToEditSpace = () => {
+    setEditCode(benchmarkCode);
+  };
+
+  // Reset to default canonical benchmark (#13)
+  const handleResetToDefault = () => {
+    const code = activePreset ? activePreset.code : activeTopic.defaultCode;
+    setEditCode(code);
+    setBenchmarkCode(code);
+    setValidationResult({ isValid: true, issues: [] });
+
+    const initialParams: Record<string, any> = {};
+    activeTopic.parameters.forEach((p) => {
+      initialParams[p.id] = activePreset?.parameters?.[p.id] ?? p.defaultValue;
+    });
+    setParamValues(initialParams);
+
+    const { steps } = activeTopic.buildExecutionPlan(code, initialParams);
+    setSnapshots(steps);
+    setBenchmarkSnapshots(steps);
+    setMode('DEFAULT');
+    setCurrentStep(0);
+    setStatus('idle');
+  };
+
+  // Step navigation (#11, #12)
+  const handleNextStep = useCallback(() => {
+    setCurrentStep((prev) => {
+      if (prev < snapshots.length - 1) {
+        return prev + 1;
+      }
+      setStatus('completed');
+      return prev;
+    });
+  }, [snapshots.length]);
+
+  const handlePrevStep = useCallback(() => {
+    setCurrentStep((prev) => {
+      if (prev > 0) {
+        if (status === 'completed') setStatus('paused');
+        return prev - 1;
+      }
+      return 0;
+    });
+  }, [status]);
+
+  const handleReset = () => {
+    setCurrentStep(0);
+    setStatus('paused');
+  };
+
+  const handlePlay = () => {
+    if (currentStep >= snapshots.length - 1) {
+      setCurrentStep(0);
+    }
+    setStatus('running');
+  };
+
+  const handlePause = () => {
+    setStatus('paused');
+  };
+
+  // Playback timer loop
+  useEffect(() => {
+    let timer: any;
+    if (status === 'running') {
+      const intervalMs = Math.round(1800 / playbackSpeed);
+      timer = setInterval(() => {
+        setCurrentStep((prev) => {
+          if (prev < snapshots.length - 1) {
+            return prev + 1;
+          } else {
+            setStatus('completed');
+            return prev;
+          }
+        });
+      }, intervalMs);
+    }
+    return () => clearInterval(timer);
+  }, [status, playbackSpeed, snapshots.length]);
+
+  // Global Keyboard Controls (#56)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept if user is typing in the textarea
+      if (
+        document.activeElement?.tagName === 'TEXTAREA' ||
+        document.activeElement?.tagName === 'INPUT'
+      ) {
+        return;
+      }
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (status === 'running') {
+          handlePause();
+        } else {
+          handlePlay();
+        }
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        handleNextStep();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handlePrevStep();
+      } else if (e.key.toLowerCase() === 'r') {
+        e.preventDefault();
+        handleReset();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [status, handleNextStep, handlePrevStep]);
+
+  // Current active snapshot
+  const activeSnapshot = snapshots[currentStep] || snapshots[0];
+  const previousSnapshot = currentStep > 0 ? snapshots[currentStep - 1] : undefined;
+  const events = snapshots.map((s) => s.event).filter(Boolean) as any[];
+
+  const lastBenchmarkSnapshot = benchmarkSnapshots[benchmarkSnapshots.length - 1] || benchmarkSnapshots[0];
+  const lastCustomSnapshot = snapshots[snapshots.length - 1] || snapshots[0];
+
+  return (
+    <div id="workstation-root" className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-cyan-900 selection:text-white">
+      {/* 1. Header / Topic Selector / Execution Status Bar (#49, #57) */}
+      <Header
+        topics={SIMULATION_TOPICS}
+        activeTopic={activeTopic}
+        onSelectTopic={handleSelectTopic}
+        activePreset={activePreset}
+        onSelectPreset={handleSelectPreset}
+        mode={mode}
+        status={status}
+        currentStep={currentStep}
+        totalSteps={snapshots.length}
+        activeView={activeView}
+        onChangeView={setActiveView}
+        onOpenDocs={() => setIsDocsOpen(true)}
+        onOpenComparison={() => setIsComparisonOpen(true)}
+      />
+
+      {/* 2. Simulation Control Deck (#15, #16) */}
+      <ControlDeck
+        status={status}
+        mode={mode}
+        currentStep={currentStep}
+        totalSteps={snapshots.length}
+        playbackSpeed={playbackSpeed}
+        activeEventLabel={activeSnapshot?.event?.label}
+        onPlay={handlePlay}
+        onPause={handlePause}
+        onPrevStep={handlePrevStep}
+        onNextStep={handleNextStep}
+        onReset={handleReset}
+        onResetToDefault={handleResetToDefault}
+        onSpeedChange={setPlaybackSpeed}
+        onToggleParams={() => setIsParamsOpen(!isParamsOpen)}
+        isParamsOpen={isParamsOpen}
+      />
+
+      {/* 3. Code / Input Workbench: Default Benchmark vs Edit Space (#4, #5, #7) */}
+      <Workbench
+        benchmarkCode={benchmarkCode}
+        editCode={editCode}
+        onChangeEditCode={setEditCode}
+        activeLine={activeSnapshot?.activeLine}
+        view={activeView}
+        validationResult={validationResult}
+        onExecuteCustom={handleExecuteCustom}
+        onCopyToEditSpace={handleCopyToEditSpace}
+        isExecuting={status === 'running'}
+      />
+
+      {/* Main Workspace Layout: Visualizer, Parameters, Telemetry, Inspector (#49) */}
+      <main className="flex-1 p-3 sm:p-4 max-w-[1720px] mx-auto w-full space-y-4">
+        {/* Row A: Main Interactive Visualizer & Dynamic Parameter Panel */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Main Visualizer Router */}
+          <div className={isParamsOpen ? 'lg:col-span-8 xl:col-span-9' : 'lg:col-span-12'}>
+            <VisualizerRouter
+              topic={activeTopic}
+              state={activeSnapshot.state}
+            />
+          </div>
+
+          {/* Collapsible / Dynamic Parameter Panel (#17, #18) */}
+          {isParamsOpen && (
+            <div className="lg:col-span-4 xl:col-span-3">
+              <ParameterPanel
+                parameters={activeTopic.parameters}
+                values={paramValues}
+                onChange={handleParamChange}
+                onResetParams={handleResetParams}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Row B: Telemetry Matrix (#25, #26, #27) */}
+        <TelemetryMatrix
+          metrics={activeTopic.metrics}
+          values={activeSnapshot.metrics || {}}
+          previousValues={previousSnapshot?.metrics}
+          topicId={activeTopic.id}
+          step={currentStep}
+        />
+
+        {/* Row C: Timeline & Chronological Event Log (#23, #24) */}
+        <TimelineEventLog
+          events={events}
+          currentStep={currentStep}
+          totalSteps={snapshots.length}
+          onSelectStep={(s) => {
+            setCurrentStep(s);
+            if (status === 'completed') setStatus('paused');
+          }}
+        />
+
+        {/* Row D: Deep Technical Inspector (#28, #29) */}
+        <DeepInspector
+          explanation={activeSnapshot.explanation}
+          depth={explanationDepth}
+          onChangeDepth={setExplanationDepth}
+        />
+      </main>
+
+      {/* Before / After Comparison Modal (#30, #31, #72) */}
+      <ComparisonModal
+        isOpen={isComparisonOpen}
+        onClose={() => setIsComparisonOpen(false)}
+        metrics={activeTopic.metrics}
+        benchmarkMetrics={lastBenchmarkSnapshot?.metrics || {}}
+        customMetrics={lastCustomSnapshot?.metrics || {}}
+        benchmarkTitle="Default Benchmark (Canonical)"
+        customTitle={mode === 'CUSTOM' ? 'Custom Run' : 'Current Active Plan'}
+      />
+
+      {/* Architecture & Documentation Guide Modal (#61, #62) */}
+      <TopicDocsModal
+        isOpen={isDocsOpen}
+        onClose={() => setIsDocsOpen(false)}
+        topicName={activeTopic.name}
+        docs={activeTopic.docs}
+      />
+    </div>
+  );
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/components/CatalystVisualizer.tsx ===
+import { useState } from 'react';
+import {
+  CatalystState,
+  PlanNode,
+  CatalystPhaseId,
+  RDDStage
+} from '../types/catalyst';
+import {
+  GitCommit,
+  Layers,
+  Cpu,
+  FileCode,
+  ArrowDown,
+  Info,
+  CheckCircle2,
+  AlertCircle,
+  Network,
+  Sparkles,
+  Zap,
+  Boxes,
+  Database
+} from 'lucide-react';
+
+interface CatalystVisualizerProps {
+  state: CatalystState;
+  onSelectNode?: (nodeId: string) => void;
+}
+
+type ActiveVisualizerTab = 'tree' | 'stages' | 'codegen' | 'rules';
+
+const PHASES: Array<{ id: CatalystPhaseId; label: string; stepIdx: number }> = [
+  { id: 'unresolved_logical', label: '1. Unresolved Plan', stepIdx: 0 },
+  { id: 'analyzed_logical', label: '2. Analyzed Plan', stepIdx: 1 },
+  { id: 'optimized_logical', label: '3. Optimized Logical', stepIdx: 2 },
+  { id: 'physical_planning', label: '4. Physical Plan', stepIdx: 3 },
+  { id: 'codegen_execution', label: '5. WholeStage Codegen', stepIdx: 4 },
+];
+
+export function CatalystVisualizer({ state }: CatalystVisualizerProps) {
+  const [activeTab, setActiveTab] = useState<ActiveVisualizerTab>('tree');
+  const [selectedNode, setSelectedNode] = useState<PlanNode | null>(null);
+
+  const currentPhaseIdx = PHASES.findIndex((p) => p.id === state.phase);
+
+  return (
+    <div id="catalyst-visualizer" className="bg-slate-900/90 border border-slate-800 rounded-lg overflow-hidden flex flex-col h-[520px]">
+      {/* Top Banner: Catalyst Phase Stepper */}
+      <div className="bg-slate-950 px-3 py-2 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-xs font-mono">
+          <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+          <span className="font-semibold text-slate-200">Catalyst Pipeline:</span>
+        </div>
+
+        {/* 5 Phase Pills */}
+        <div className="flex items-center gap-1 text-[11px] font-mono overflow-x-auto py-0.5">
+          {PHASES.map((p, idx) => {
+            const isCompleted = idx < currentPhaseIdx;
+            const isCurrent = idx === currentPhaseIdx;
+
+            return (
+              <div
+                key={p.id}
+                className={`flex items-center gap-1 px-2 py-0.5 rounded border transition-all ${
+                  isCurrent
+                    ? 'bg-cyan-950 border-cyan-500 text-cyan-300 font-bold shadow-sm shadow-cyan-900/30'
+                    : isCompleted
+                    ? 'bg-slate-800/80 border-slate-700 text-slate-300'
+                    : 'bg-slate-900/40 border-slate-800 text-slate-500'
+                }`}
+              >
+                {isCompleted ? (
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                ) : isCurrent ? (
+                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                ) : (
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
+                )}
+                <span>{p.label}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* View Mode Tabs */}
+        <div className="flex items-center gap-1 bg-slate-900 p-0.5 rounded border border-slate-800 text-xs">
+          <button
+            onClick={() => setActiveTab('tree')}
+            className={`px-2 py-1 rounded flex items-center gap-1 transition-colors ${
+              activeTab === 'tree' ? 'bg-slate-800 text-cyan-300 font-medium' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Boxes className="w-3.5 h-3.5" />
+            <span>Plan Tree</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('stages')}
+            className={`px-2 py-1 rounded flex items-center gap-1 transition-colors ${
+              activeTab === 'stages' ? 'bg-slate-800 text-cyan-300 font-medium' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Network className="w-3.5 h-3.5" />
+            <span>Stage DAG</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('codegen')}
+            className={`px-2 py-1 rounded flex items-center gap-1 transition-colors ${
+              activeTab === 'codegen' ? 'bg-slate-800 text-cyan-300 font-medium' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <FileCode className="w-3.5 h-3.5" />
+            <span>Java Codegen</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('rules')}
+            className={`px-2 py-1 rounded flex items-center gap-1 transition-colors ${
+              activeTab === 'rules' ? 'bg-slate-800 text-cyan-300 font-medium' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5" />
+            <span>Rules ({state.ruleApplications?.length || 0})</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Canvas Area */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Main interactive visual content */}
+        <div className="flex-1 overflow-auto p-4 flex justify-center items-start">
+          {activeTab === 'tree' && (
+            <div className="w-full max-w-2xl py-2 flex flex-col items-center">
+              <TreeNodeItem
+                node={state.rootNode}
+                selectedNodeId={selectedNode?.id}
+                onSelectNode={(n) => setSelectedNode(n)}
+              />
+            </div>
+          )}
+
+          {activeTab === 'stages' && (
+            <div className="w-full max-w-3xl space-y-4 py-2">
+              <div className="text-xs text-slate-400 font-mono flex items-center justify-between pb-2 border-b border-slate-800">
+                <span>Distributed RDD Execution Stages (DAG Scheduler)</span>
+                <span>Partitions: {state.stages.reduce((acc, s) => acc + s.partitions, 0)} total</span>
+              </div>
+
+              {state.stages.length === 0 ? (
+                <div className="text-center py-12 text-slate-500 text-xs">
+                  Stage boundary decomposition is generated during Physical Planning and Code Generation (Phases 4 & 5).
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {state.stages.map((stage) => (
+                    <StageCard key={stage.stageId} stage={stage} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'codegen' && (
+            <div className="w-full h-full flex flex-col">
+              <div className="bg-slate-950 p-2 border-b border-slate-800 text-xs font-mono text-cyan-300 flex items-center justify-between">
+                <span>Janino In-Memory Java Bytecode Synthesizer</span>
+                <span className="text-[11px] text-slate-400">Project Tungsten (WholeStageCodegenExec)</span>
+              </div>
+              <pre className="flex-1 overflow-auto p-3 font-mono text-xs text-slate-300 bg-slate-950/80 leading-relaxed select-text">
+                <code>{state.generatedCode}</code>
+              </pre>
+            </div>
+          )}
+
+          {activeTab === 'rules' && (
+            <div className="w-full max-w-2xl space-y-3 py-2">
+              <div className="text-xs text-slate-400 font-mono pb-2 border-b border-slate-800">
+                Catalyst RuleExecutor History (Pattern Matching Transforms)
+              </div>
+              {state.ruleApplications?.length === 0 ? (
+                <div className="text-center py-12 text-slate-500 text-xs">
+                  Rule transformations begin during Phase 2 (Analysis) and Phase 3 (Logical Optimization).
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {state.ruleApplications.map((rule, i) => (
+                    <div key={i} className="bg-slate-950 p-2.5 rounded border border-slate-800 text-xs font-mono">
+                      <div className="flex items-center justify-between text-cyan-300 font-semibold mb-1">
+                        <span>{rule.ruleName}</span>
+                        <span className="text-[10px] text-slate-500 font-normal">{rule.timeMs} ms</span>
+                      </div>
+                      <div className="text-slate-400 text-[11px] mb-1">{rule.description}</div>
+                      <div className="text-[10px] text-indigo-400">Target: {rule.affectedNode}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Selected Node Details Drawer (Right side) */}
+        {selectedNode && (
+          <div className="w-72 bg-slate-950 border-l border-slate-800 p-3 overflow-auto flex flex-col text-xs">
+            <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
+              <span className="font-semibold text-cyan-300 font-mono">{selectedNode.name}</span>
+              <button
+                onClick={() => setSelectedNode(null)}
+                className="text-slate-500 hover:text-slate-300 text-xs px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="space-y-2.5">
+              <div>
+                <span className="text-[10px] uppercase font-mono text-slate-500">Operation</span>
+                <p className="text-slate-300 font-medium mt-0.5">{selectedNode.title}</p>
+              </div>
+
+              <div>
+                <span className="text-[10px] uppercase font-mono text-slate-500">Details</span>
+                <p className="text-slate-400 text-[11px] font-mono mt-0.5 break-words bg-slate-900/60 p-1.5 rounded border border-slate-800/80">
+                  {selectedNode.details}
+                </p>
+              </div>
+
+              {selectedNode.pushedFilters && selectedNode.pushedFilters.length > 0 && (
+                <div>
+                  <span className="text-[10px] uppercase font-mono text-emerald-400 font-semibold">
+                    Pushed Down Filters
+                  </span>
+                  <ul className="mt-1 space-y-1">
+                    {selectedNode.pushedFilters.map((f, i) => (
+                      <li key={i} className="text-[11px] font-mono text-emerald-300 bg-emerald-950/40 border border-emerald-800/60 px-1.5 py-0.5 rounded">
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {selectedNode.schema && selectedNode.schema.length > 0 && (
+                <div>
+                  <span className="text-[10px] uppercase font-mono text-slate-500">Resolved Schema</span>
+                  <div className="mt-1 max-h-36 overflow-auto border border-slate-800 rounded bg-slate-900/40">
+                    <table className="w-full text-[10px] font-mono">
+                      <tbody>
+                        {selectedNode.schema.map((attr, i) => (
+                          <tr key={i} className="border-b border-slate-800/60 last:border-0">
+                            <td className="p-1 text-slate-300">{attr.name}</td>
+                            <td className="p-1 text-indigo-300 text-right">{attr.dataType}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {selectedNode.transformationBadge && (
+                <div className="p-2 rounded bg-cyan-950/40 border border-cyan-800/60 text-[11px] text-cyan-200">
+                  <span className="font-semibold block mb-0.5">Optimization Applied:</span>
+                  {selectedNode.transformationBadge}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Recursive Tree Node Renderer
+function TreeNodeItem({
+  node,
+  selectedNodeId,
+  onSelectNode,
+}: {
+  node: PlanNode;
+  selectedNodeId?: string;
+  onSelectNode: (node: PlanNode) => void;
+}) {
+  const isSelected = selectedNodeId === node.id;
+
+  const getNodeColor = (type: string) => {
+    switch (type) {
+      case 'FileSourceScan':
+      case 'LogicalRelation':
+      case 'UnresolvedRelation':
+        return 'border-blue-700 bg-blue-950/40 text-blue-200';
+      case 'Filter':
+        return 'border-emerald-700 bg-emerald-950/40 text-emerald-200';
+      case 'Project':
+        return 'border-indigo-700 bg-indigo-950/40 text-indigo-200';
+      case 'Join':
+      case 'BroadcastHashJoin':
+      case 'SortMergeJoin':
+        return 'border-purple-700 bg-purple-950/40 text-purple-200';
+      case 'BroadcastExchange':
+      case 'ShuffleExchange':
+        return 'border-rose-700 bg-rose-950/40 text-rose-200';
+      case 'WholeStageCodegen':
+        return 'border-cyan-600 bg-cyan-950/40 text-cyan-200';
+      default:
+        return 'border-slate-700 bg-slate-900 text-slate-200';
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center">
+      {/* Current Node Box */}
+      <div
+        onClick={() => onSelectNode(node)}
+        className={`px-3 py-2 rounded border cursor-pointer transition-all max-w-md w-72 text-center relative ${getNodeColor(
+          node.type
+        )} ${
+          isSelected
+            ? 'ring-2 ring-cyan-400 shadow-lg shadow-cyan-950'
+            : 'hover:brightness-110 shadow-sm'
+        }`}
+      >
+        {node.transformationBadge && (
+          <span className="absolute -top-2 right-2 text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-cyan-600 text-white font-bold tracking-wide shadow">
+            {node.transformationBadge}
+          </span>
+        )}
+
+        <div className="text-xs font-bold font-mono tracking-tight flex items-center justify-center gap-1">
+          {node.type === 'WholeStageCodegen' && <Zap className="w-3 h-3 text-cyan-400" />}
+          {node.type.includes('Join') && <Sparkles className="w-3 h-3 text-purple-400" />}
+          {node.type.includes('Scan') && <Database className="w-3 h-3 text-blue-400" />}
+          <span>{node.title}</span>
+        </div>
+
+        <div className="text-[10px] text-slate-400 font-mono mt-0.5 truncate" title={node.details}>
+          {node.details}
+        </div>
+      </div>
+
+      {/* Children branches */}
+      {node.children && node.children.length > 0 && (
+        <div className="flex flex-col items-center">
+          {/* Connector down */}
+          <div className="w-px h-4 bg-slate-700" />
+
+          {/* Children container */}
+          <div className="flex items-start gap-4 relative">
+            {node.children.length > 1 && (
+              <div className="absolute top-0 left-12 right-12 h-px bg-slate-700" />
+            )}
+            {node.children.map((child) => (
+              <div key={child.id} className="flex flex-col items-center">
+                <div className="w-px h-3 bg-slate-700" />
+                <TreeNodeItem
+                  node={child}
+                  selectedNodeId={selectedNodeId}
+                  onSelectNode={onSelectNode}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Stage Card Renderer for Stage DAG
+function StageCard({ stage }: { stage: RDDStage; key?: string | number }) {
+  return (
+    <div className="bg-slate-950 border border-slate-800 rounded p-3 text-xs font-mono">
+      <div className="flex items-center justify-between pb-1.5 border-b border-slate-800 mb-2">
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-cyan-300">{stage.name}</span>
+          {stage.isShuffle ? (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800">
+              SHUFFLE REQUIRED
+            </span>
+          ) : (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+              PIPELINED (NO SHUFFLE)
+            </span>
+          )}
+        </div>
+        <span className="text-slate-400 text-[11px]">{stage.partitions} Partitions</span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5 mb-2">
+        <span className="text-[10px] text-slate-500">Pipelined Operators:</span>
+        {stage.operators.map((op, i) => (
+          <span key={i} className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800 text-[10px]">
+            {op}
+          </span>
+        ))}
+      </div>
+
+      {stage.isShuffle && (
+        <div className="flex items-center gap-4 text-[11px] text-slate-400 pt-1 border-t border-slate-900">
+          <span>Shuffle Read: <strong className="text-slate-200">{stage.shuffleReadMB} MB</strong></span>
+          <span>Shuffle Write: <strong className="text-slate-200">{stage.shuffleWriteMB} MB</strong></span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/components/ComparisonModal.tsx ===
+import React from 'react';
+import { MetricDefinition } from '../types/simulation';
+import { X, GitCompare, ArrowRight, TrendingDown, TrendingUp, Minus, AlertCircle } from 'lucide-react';
+
+interface ComparisonModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  metrics: MetricDefinition[];
+  benchmarkMetrics: Record<string, number>;
+  customMetrics: Record<string, number>;
+  benchmarkTitle?: string;
+  customTitle?: string;
+}
+
+export function ComparisonModal({
+  isOpen,
+  onClose,
+  metrics,
+  benchmarkMetrics,
+  customMetrics,
+  benchmarkTitle = 'Default Benchmark Run',
+  customTitle = 'Custom Configuration Run',
+}: ComparisonModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-w-3xl w-full max-h-[85vh] flex flex-col overflow-hidden text-slate-200">
+        {/* Modal Header */}
+        <div className="bg-slate-950 px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <GitCompare className="w-4 h-4 text-indigo-400" />
+            <span className="font-bold text-sm">Execution Comparative Analysis</span>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <div className="flex-1 overflow-auto p-4 space-y-4 text-xs">
+          {/* Causal Chain Breakdown (#34) */}
+          <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
+            <span className="font-semibold text-cyan-300 font-mono text-[11px] block mb-2 uppercase">
+              Causal Chain of Differences
+            </span>
+            <div className="flex flex-wrap items-center gap-2 text-slate-300">
+              <span className="px-2 py-1 rounded bg-slate-900 border border-slate-700">
+                User Configuration / Query Delta
+              </span>
+              <ArrowRight className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+              <span className="px-2 py-1 rounded bg-slate-900 border border-slate-700">
+                Catalyst Rule Evaluation
+              </span>
+              <ArrowRight className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+              <span className="px-2 py-1 rounded bg-slate-900 border border-slate-700">
+                Physical Join & Exchange Strategy
+              </span>
+              <ArrowRight className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+              <span className="px-2 py-1 rounded bg-indigo-950 text-indigo-200 border border-indigo-700 font-semibold">
+                Telemetry & Runtime Latency
+              </span>
+            </div>
+          </div>
+
+          {/* Metrics Diff Table (#30, #31) */}
+          <div className="border border-slate-800 rounded-lg overflow-hidden">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-950/80 border-b border-slate-800 text-[11px] text-slate-400 font-mono">
+                  <th className="p-2.5">Metric</th>
+                  <th className="p-2.5 text-right">{benchmarkTitle}</th>
+                  <th className="p-2.5 text-right">{customTitle}</th>
+                  <th className="p-2.5 text-right">Variance</th>
+                  <th className="p-2.5 text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800 font-mono">
+                {metrics.map((m) => {
+                  const bVal = benchmarkMetrics[m.id] ?? 0;
+                  const cVal = customMetrics[m.id] ?? 0;
+                  const diff = cVal - bVal;
+                  const pct = bVal !== 0 ? Math.round((diff / bVal) * 100) : (cVal > 0 ? 100 : 0);
+
+                  // Lower is better for latency, shuffle, memory, scanned rows
+                  const lowerIsBetter = ['estimatedLatencyMs', 'shuffleVolumeMB', 'shuffleExchanges', 'projectedMemoryMB', 'scannedRows'].includes(m.id);
+                  const isImprovement = lowerIsBetter ? diff < 0 : diff > 0;
+                  const isDegradation = lowerIsBetter ? diff > 0 : diff < 0;
+
+                  return (
+                    <tr key={m.id} className="hover:bg-slate-950/40">
+                      <td className="p-2.5 text-slate-300 font-sans">
+                        <div className="font-medium text-xs">{m.label}</div>
+                        {m.unit && <div className="text-[10px] text-slate-500">{m.unit}</div>}
+                      </td>
+                      <td className="p-2.5 text-right text-slate-300">
+                        {typeof bVal === 'number' ? bVal.toLocaleString() : bVal}
+                      </td>
+                      <td className="p-2.5 text-right text-cyan-300 font-semibold">
+                        {typeof cVal === 'number' ? cVal.toLocaleString() : cVal}
+                      </td>
+                      <td className="p-2.5 text-right">
+                        {diff === 0 ? (
+                          <span className="text-slate-500 font-mono">0% (Equal)</span>
+                        ) : (
+                          <span className={`font-mono ${isImprovement ? 'text-emerald-400' : 'text-amber-400'}`}>
+                            {diff > 0 ? `+${pct}%` : `${pct}%`}
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-2.5 text-center">
+                        {diff === 0 ? (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400">
+                            Unchanged
+                          </span>
+                        ) : isImprovement ? (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center justify-center gap-1">
+                            <TrendingDown className="w-3 h-3" /> Improved
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-950 text-amber-300 border border-amber-800 flex items-center justify-center gap-1">
+                            <TrendingUp className="w-3 h-3" /> Regression
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Qualitative Takeaway */}
+          <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 text-slate-300 text-xs leading-relaxed">
+            <strong className="text-cyan-300 font-mono block mb-1">Optimizer Observation:</strong>
+            Comparing the execution profiles reveals how parameter and query alterations shift the underlying execution plan. When data sizes or broadcast thresholds are altered, Catalyst either avoids network shuffles completely (BroadcastHashJoin) or inserts ShuffleExchange partitions (SortMergeJoin).
+          </div>
+        </div>
+
+        {/* Modal Footer */}
+        <div className="bg-slate-950 px-4 py-2.5 border-t border-slate-800 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-xs transition-colors"
+          >
+            Close Comparison
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/components/ControlDeck.tsx ===
+import { useState, useEffect } from 'react';
+import {
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  RotateCcw,
+  Sparkles,
+  Zap,
+  CheckCircle2,
+  AlertTriangle,
+  Clock,
+  Settings2
+} from 'lucide-react';
+import { SimulationStatus, ExecutionMode } from '../types/simulation';
+
+interface ControlDeckProps {
+  status: SimulationStatus;
+  mode: ExecutionMode;
+  currentStep: number;
+  totalSteps: number;
+  playbackSpeed: number;
+  activeEventLabel?: string;
+  onPlay: () => void;
+  onPause: () => void;
+  onPrevStep: () => void;
+  onNextStep: () => void;
+  onReset: () => void;
+  onResetToDefault: () => void;
+  onSpeedChange: (speed: number) => void;
+  onToggleParams?: () => void;
+  isParamsOpen?: boolean;
+}
+
+export function ControlDeck({
+  status,
+  mode,
+  currentStep,
+  totalSteps,
+  playbackSpeed,
+  activeEventLabel,
+  onPlay,
+  onPause,
+  onPrevStep,
+  onNextStep,
+  onReset,
+  onResetToDefault,
+  onSpeedChange,
+  onToggleParams,
+  isParamsOpen,
+}: ControlDeckProps) {
+  const isRunning = status === 'running';
+  const isFirstStep = currentStep === 0;
+  const isLastStep = currentStep >= totalSteps - 1;
+
+  const speeds = [0.5, 1, 2, 4];
+
+  return (
+    <div id="control-deck" className="bg-slate-900 border-b border-slate-800 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-sm select-none">
+      {/* Playback step controls */}
+      <div className="flex items-center gap-1.5">
+        <button
+          id="btn-prev-step"
+          onClick={onPrevStep}
+          disabled={isFirstStep || isRunning}
+          title="Previous Step (Left Arrow)"
+          className={`px-2.5 py-1.5 rounded flex items-center gap-1 font-medium transition-colors ${
+            isFirstStep || isRunning
+              ? 'text-slate-600 bg-slate-800/40 cursor-not-allowed'
+              : 'text-slate-200 bg-slate-800 hover:bg-slate-700 active:scale-95'
+          }`}
+        >
+          <SkipBack className="w-4 h-4" />
+          <span className="hidden sm:inline">Prev</span>
+        </button>
+
+        <button
+          id="btn-play-pause"
+          onClick={isRunning ? onPause : onPlay}
+          title="Play/Pause (Space)"
+          className={`px-3 py-1.5 rounded flex items-center gap-1.5 font-semibold text-white transition-all shadow-sm ${
+            isRunning
+              ? 'bg-amber-600 hover:bg-amber-500'
+              : 'bg-emerald-600 hover:bg-emerald-500'
+          }`}
+        >
+          {isRunning ? (
+            <>
+              <Pause className="w-4 h-4 fill-current" />
+              <span>Pause</span>
+            </>
+          ) : (
+            <>
+              <Play className="w-4 h-4 fill-current" />
+              <span>{isLastStep ? 'Replay' : 'Play'}</span>
+            </>
+          )}
+        </button>
+
+        <button
+          id="btn-next-step"
+          onClick={onNextStep}
+          disabled={isLastStep || isRunning}
+          title="Next Step (Right Arrow)"
+          className={`px-2.5 py-1.5 rounded flex items-center gap-1 font-medium transition-colors ${
+            isLastStep || isRunning
+              ? 'text-slate-600 bg-slate-800/40 cursor-not-allowed'
+              : 'text-slate-200 bg-slate-800 hover:bg-slate-700 active:scale-95'
+          }`}
+        >
+          <span className="hidden sm:inline">Next</span>
+          <SkipForward className="w-4 h-4" />
+        </button>
+
+        <div className="h-4 w-px bg-slate-800 mx-1" />
+
+        {/* Reset button */}
+        <button
+          id="btn-reset-step"
+          onClick={onReset}
+          title="Reset to Step 0 (R)"
+          className="px-2 py-1.5 rounded text-slate-300 bg-slate-800/60 hover:bg-slate-800 hover:text-white transition-colors"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+        </button>
+
+        {mode === 'CUSTOM' && (
+          <button
+            id="btn-reset-default"
+            onClick={onResetToDefault}
+            title="Reset to Canonical Benchmark"
+            className="px-2.5 py-1 text-xs rounded border border-slate-700 text-amber-300 hover:bg-amber-950/40 transition-colors flex items-center gap-1"
+          >
+            <Sparkles className="w-3 h-3 text-amber-400" />
+            <span>Reset to Default</span>
+          </button>
+        )}
+      </div>
+
+      {/* Current event banner */}
+      <div className="hidden lg:flex items-center gap-2 bg-slate-950/70 border border-slate-800/80 px-3 py-1 rounded max-w-md truncate">
+        <span className="text-xs uppercase font-mono text-cyan-400 flex items-center gap-1 flex-shrink-0">
+          <Zap className="w-3 h-3" /> Event:
+        </span>
+        <span className="text-xs text-slate-300 truncate" title={activeEventLabel}>
+          {activeEventLabel || 'Simulation Initialized'}
+        </span>
+      </div>
+
+      {/* Playback speed & parameter toggles */}
+      <div className="flex items-center gap-2">
+        <div className="flex items-center bg-slate-800/80 rounded p-0.5 border border-slate-700/60 text-xs">
+          <Clock className="w-3 h-3 text-slate-400 ml-1.5 mr-1" />
+          {speeds.map((s) => (
+            <button
+              key={s}
+              id={`btn-speed-${s}x`}
+              onClick={() => onSpeedChange(s)}
+              className={`px-2 py-0.5 rounded font-mono transition-colors ${
+                playbackSpeed === s
+                  ? 'bg-cyan-600 text-white font-bold'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {s}×
+            </button>
+          ))}
+        </div>
+
+        {onToggleParams && (
+          <button
+            id="btn-toggle-params"
+            onClick={onToggleParams}
+            className={`px-2.5 py-1 rounded border text-xs font-medium flex items-center gap-1.5 transition-colors ${
+              isParamsOpen
+                ? 'bg-cyan-950 border-cyan-700 text-cyan-300'
+                : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+            }`}
+          >
+            <Settings2 className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Parameters</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/components/DeepInspector.tsx ===
+import React from 'react';
+import { StepExplanation, ExplanationDepth } from '../types/simulation';
+import {
+  FileSearch,
+  HelpCircle,
+  Cpu,
+  TrendingUp,
+  Layers,
+  Sparkles,
+  BookOpen
+} from 'lucide-react';
+
+interface DeepInspectorProps {
+  explanation?: StepExplanation;
+  depth: ExplanationDepth;
+  onChangeDepth: (depth: ExplanationDepth) => void;
+}
+
+export function DeepInspector({
+  explanation,
+  depth,
+  onChangeDepth,
+}: DeepInspectorProps) {
+  if (!explanation) {
+    return (
+      <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 text-center text-slate-500 text-xs">
+        Select or advance a step to inspect technical details.
+      </div>
+    );
+  }
+
+  // Get progressive explanation according to depth
+  const depthText =
+    depth === 'beginner'
+      ? explanation.depths?.beginner || explanation.whatHappened
+      : depth === 'technical'
+      ? explanation.depths?.technical || explanation.whyItHappened
+      : explanation.depths?.internals || explanation.underlyingMechanism;
+
+  return (
+    <div id="deep-inspector" className="bg-slate-900 border border-slate-800 rounded-lg p-3 text-slate-200">
+      {/* Header with Depth Selector */}
+      <div className="flex flex-wrap items-center justify-between pb-2 mb-3 border-b border-slate-800 gap-2 text-xs">
+        <div className="flex items-center gap-2">
+          <FileSearch className="w-4 h-4 text-cyan-400" />
+          <span className="font-bold text-slate-200">{explanation.title}</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-950 border border-indigo-800 text-indigo-300 font-mono">
+            {explanation.phase}
+          </span>
+        </div>
+
+        {/* Depth Selector: Beginner / Technical / Internals */}
+        <div className="flex items-center bg-slate-950 p-0.5 rounded border border-slate-800 text-[11px]">
+          <button
+            id="depth-beginner"
+            onClick={() => onChangeDepth('beginner')}
+            className={`px-2 py-0.5 rounded transition-colors ${
+              depth === 'beginner'
+                ? 'bg-slate-800 text-cyan-300 font-medium'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Beginner
+          </button>
+          <button
+            id="depth-technical"
+            onClick={() => onChangeDepth('technical')}
+            className={`px-2 py-0.5 rounded transition-colors ${
+              depth === 'technical'
+                ? 'bg-slate-800 text-cyan-300 font-medium'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Technical
+          </button>
+          <button
+            id="depth-internals"
+            onClick={() => onChangeDepth('internals')}
+            className={`px-2 py-0.5 rounded transition-colors ${
+              depth === 'internals'
+                ? 'bg-slate-800 text-cyan-300 font-medium'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Internals
+          </button>
+        </div>
+      </div>
+
+      {/* Dynamic Explanation Summary Callout */}
+      <div className="bg-slate-950/80 border border-slate-800/80 p-2.5 rounded mb-3 text-xs leading-relaxed text-slate-300">
+        <span className="text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-semibold block mb-1">
+          {depth.toUpperCase()} PERSPECTIVE
+        </span>
+        <p>{depthText}</p>
+      </div>
+
+      {/* 4 Standard Required Sections (#28) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+        {/* Section 1: What Happened? */}
+        <div className="bg-slate-950/60 p-2.5 rounded border border-slate-800/80">
+          <div className="flex items-center gap-1.5 font-semibold text-slate-300 mb-1">
+            <HelpCircle className="w-3.5 h-3.5 text-blue-400" />
+            <span>1. What Happened?</span>
+          </div>
+          <p className="text-slate-400 text-[11px] leading-relaxed">
+            {explanation.whatHappened}
+          </p>
+        </div>
+
+        {/* Section 2: Why It Happened? */}
+        <div className="bg-slate-950/60 p-2.5 rounded border border-slate-800/80">
+          <div className="flex items-center gap-1.5 font-semibold text-slate-300 mb-1">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>2. Why It Happened?</span>
+          </div>
+          <p className="text-slate-400 text-[11px] leading-relaxed">
+            {explanation.whyItHappened}
+          </p>
+        </div>
+
+        {/* Section 3: Underlying Mechanism */}
+        <div className="bg-slate-950/60 p-2.5 rounded border border-slate-800/80">
+          <div className="flex items-center gap-1.5 font-semibold text-slate-300 mb-1">
+            <Cpu className="w-3.5 h-3.5 text-purple-400" />
+            <span>3. Underlying Mechanism</span>
+          </div>
+          <p className="text-slate-400 text-[11px] leading-relaxed font-mono">
+            {explanation.underlyingMechanism}
+          </p>
+        </div>
+
+        {/* Section 4: Performance / Behavioral Consequences */}
+        <div className="bg-slate-950/60 p-2.5 rounded border border-slate-800/80">
+          <div className="flex items-center gap-1.5 font-semibold text-slate-300 mb-1">
+            <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+            <span>4. Performance & Consequences</span>
+          </div>
+          <p className="text-slate-400 text-[11px] leading-relaxed">
+            {explanation.consequences}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/components/Header.tsx ===
+import { useState } from 'react';
+import {
+  Layers,
+  Code,
+  Eye,
+  BookOpen,
+  GitCompare,
+  Terminal,
+  ChevronDown,
+  Info,
+  CheckCircle2,
+  Cpu,
+  Flame
+} from 'lucide-react';
+import { SimulationTopic, ExecutionMode, SimulationStatus, ScenarioPreset } from '../types/simulation';
+
+export type WorkbenchView = 'split' | 'benchmark' | 'edit';
+
+interface HeaderProps {
+  topics: SimulationTopic[];
+  activeTopic: SimulationTopic;
+  onSelectTopic: (topicId: string) => void;
+  activePreset?: ScenarioPreset;
+  onSelectPreset: (preset: ScenarioPreset) => void;
+  mode: ExecutionMode;
+  status: SimulationStatus;
+  currentStep: number;
+  totalSteps: number;
+  activeView: WorkbenchView;
+  onChangeView: (view: WorkbenchView) => void;
+  onOpenDocs: () => void;
+  onOpenComparison: () => void;
+}
+
+export function Header({
+  topics,
+  activeTopic,
+  onSelectTopic,
+  activePreset,
+  onSelectPreset,
+  mode,
+  status,
+  currentStep,
+  totalSteps,
+  activeView,
+  onChangeView,
+  onOpenDocs,
+  onOpenComparison,
+}: HeaderProps) {
+  const [topicDropdownOpen, setTopicDropdownOpen] = useState(false);
+  const [presetDropdownOpen, setPresetDropdownOpen] = useState(false);
+
+  const getStatusBadge = () => {
+    if (status === 'error') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-rose-950/80 text-rose-300 border border-rose-800">
+          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+          ERROR
+        </span>
+      );
+    }
+    if (status === 'running') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-cyan-950/80 text-cyan-300 border border-cyan-800">
+          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+          RUNNING
+        </span>
+      );
+    }
+    if (status === 'completed' || currentStep >= totalSteps - 1) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-emerald-950/80 text-emerald-300 border border-emerald-800">
+          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+          COMPLETED
+        </span>
+      );
+    }
+    if (mode === 'CUSTOM') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-amber-950/80 text-amber-300 border border-amber-800">
+          <Flame className="w-3 h-3 text-amber-400" />
+          CUSTOM EXECUTING
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+        <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+        DEFAULT BENCHMARK
+      </span>
+    );
+  };
+
+  return (
+    <header id="workstation-header" className="bg-slate-950 border-b border-slate-800 px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-slate-200">
+      {/* Topic selection & brand */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded bg-gradient-to-tr from-cyan-600 to-indigo-600 flex items-center justify-center shadow-inner">
+            <Cpu className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold tracking-tight text-white text-sm sm:text-base">
+                Spark Catalyst Workstation
+              </span>
+              <span className="text-[10px] font-mono px-1.5 py-0.2 bg-indigo-950 border border-indigo-800 text-indigo-300 rounded">
+                SIMULATOR
+              </span>
+            </div>
+            <div className="text-[11px] text-slate-400 flex items-center gap-1">
+              <span>Topic Engine:</span>
+              {/* Topic dropdown */}
+              <div className="relative inline-block">
+                <button
+                  id="btn-topic-selector"
+                  onClick={() => setTopicDropdownOpen(!topicDropdownOpen)}
+                  className="font-medium text-cyan-300 hover:text-cyan-200 underline decoration-dotted flex items-center gap-0.5"
+                >
+                  <span>{activeTopic.shortName}</span>
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+
+                {topicDropdownOpen && (
+                  <div className="absolute left-0 mt-1 w-72 bg-slate-900 border border-slate-700 rounded shadow-xl py-1 z-50">
+                    <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-slate-400 font-mono border-b border-slate-800">
+                      Simulation Topics
+                    </div>
+                    {topics.map((t) => (
+                      <button
+                        key={t.id}
+                        id={`topic-option-${t.id}`}
+                        onClick={() => {
+                          onSelectTopic(t.id);
+                          setTopicDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-800 flex flex-col ${
+                          t.id === activeTopic.id ? 'bg-slate-800/80 text-cyan-300 font-semibold' : 'text-slate-300'
+                        }`}
+                      >
+                        <span className="font-medium">{t.name}</span>
+                        <span className="text-[10px] text-slate-400">{t.category}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Preset scenario dropdown */}
+        {activeTopic.presets && activeTopic.presets.length > 0 && (
+          <div className="relative hidden md:block">
+            <button
+              id="btn-preset-selector"
+              onClick={() => setPresetDropdownOpen(!presetDropdownOpen)}
+              className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded text-xs text-slate-300 flex items-center gap-1.5 transition-colors"
+            >
+              <Terminal className="w-3.5 h-3.5 text-amber-400" />
+              <span className="max-w-[160px] truncate">{activePreset?.name || 'Scenarios'}</span>
+              <ChevronDown className="w-3 h-3 text-slate-400" />
+            </button>
+
+            {presetDropdownOpen && (
+              <div className="absolute left-0 mt-1 w-80 bg-slate-900 border border-slate-700 rounded shadow-xl py-1 z-50">
+                <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-slate-400 font-mono border-b border-slate-800">
+                  Scenario Presets
+                </div>
+                {activeTopic.presets.map((preset) => (
+                  <button
+                    key={preset.id}
+                    id={`preset-option-${preset.id}`}
+                    onClick={() => {
+                      onSelectPreset(preset);
+                      setPresetDropdownOpen(false);
+                    }}
+                    className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-800 flex flex-col ${
+                      preset.id === activePreset?.id ? 'bg-slate-800/80 text-amber-300 font-medium' : 'text-slate-300'
+                    }`}
+                  >
+                    <span className="font-medium">{preset.name}</span>
+                    <span className="text-[11px] text-slate-400 mt-0.5 line-clamp-2">{preset.description}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Execution status & step counter */}
+      <div className="flex items-center gap-2.5">
+        {getStatusBadge()}
+
+        <div className="bg-slate-900 border border-slate-800 px-2.5 py-1 rounded font-mono text-xs flex items-center gap-1 text-slate-300">
+          <span className="text-slate-500">STEP</span>
+          <span className="font-bold text-cyan-400">{String(currentStep + 1).padStart(2, '0')}</span>
+          <span className="text-slate-600">/</span>
+          <span className="text-slate-400">{String(totalSteps).padStart(2, '0')}</span>
+        </div>
+      </div>
+
+      {/* View Switcher & Action Modals */}
+      <div className="flex items-center gap-2">
+        {/* View Switcher: Split / Benchmark / Edit */}
+        <div className="hidden sm:flex bg-slate-900 p-0.5 rounded border border-slate-800 text-xs">
+          <button
+            id="view-split"
+            onClick={() => onChangeView('split')}
+            className={`px-2.5 py-1 rounded flex items-center gap-1 transition-colors ${
+              activeView === 'split' ? 'bg-slate-800 text-white font-medium shadow' : 'text-slate-400 hover:text-slate-200'
+            }`}
+            title="Split View: Default Benchmark & Edit Space side-by-side"
+          >
+            <Layers className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Split View</span>
+          </button>
+          <button
+            id="view-benchmark"
+            onClick={() => onChangeView('benchmark')}
+            className={`px-2.5 py-1 rounded flex items-center gap-1 transition-colors ${
+              activeView === 'benchmark' ? 'bg-slate-800 text-white font-medium shadow' : 'text-slate-400 hover:text-slate-200'
+            }`}
+            title="Benchmark Focus: Full width read-only canonical query"
+          >
+            <Eye className="w-3.5 h-3.5 text-blue-400" />
+            <span>Benchmark</span>
+          </button>
+          <button
+            id="view-edit"
+            onClick={() => onChangeView('edit')}
+            className={`px-2.5 py-1 rounded flex items-center gap-1 transition-colors ${
+              activeView === 'edit' ? 'bg-slate-800 text-white font-medium shadow' : 'text-slate-400 hover:text-slate-200'
+            }`}
+            title="Edit Focus: Full width interactive editor"
+          >
+            <Code className="w-3.5 h-3.5 text-amber-400" />
+            <span>Edit Space</span>
+          </button>
+        </div>
+
+        {/* Compare Runs Button */}
+        <button
+          id="btn-open-comparison"
+          onClick={onOpenComparison}
+          className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white rounded text-xs flex items-center gap-1 transition-colors"
+          title="Compare Default vs Custom Execution Plans & Telemetry"
+        >
+          <GitCompare className="w-3.5 h-3.5 text-indigo-400" />
+          <span className="hidden md:inline">Compare</span>
+        </button>
+
+        {/* Documentation / Architecture Modal */}
+        <button
+          id="btn-open-docs"
+          onClick={onOpenDocs}
+          className="px-2.5 py-1 bg-indigo-950/60 hover:bg-indigo-900/80 border border-indigo-700 text-indigo-200 rounded text-xs flex items-center gap-1 transition-colors"
+          title="Catalyst Architecture & Workstation Guide"
+        >
+          <BookOpen className="w-3.5 h-3.5 text-indigo-300" />
+          <span className="hidden md:inline">Guide</span>
+        </button>
+      </div>
+    </header>
+  );
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/components/ParameterPanel.tsx ===
+import React from 'react';
+import { ParameterDefinition } from '../types/simulation';
+import { Sliders, HelpCircle, RefreshCw } from 'lucide-react';
+
+interface ParameterPanelProps {
+  parameters: ParameterDefinition[];
+  values: Record<string, any>;
+  onChange: (id: string, value: any) => void;
+  onResetParams: () => void;
+}
+
+export function ParameterPanel({
+  parameters,
+  values,
+  onChange,
+  onResetParams,
+}: ParameterPanelProps) {
+  // Group by category if defined
+  const categories = Array.from(new Set(parameters.map((p) => p.category || 'General')));
+
+  return (
+    <div id="parameters-panel" className="bg-slate-900 border border-slate-800 rounded-lg p-3 text-slate-200">
+      <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-800 text-xs">
+        <div className="flex items-center gap-1.5 font-semibold text-slate-300">
+          <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+          <span>Simulation Tuning Parameters</span>
+        </div>
+        <button
+          onClick={onResetParams}
+          className="text-slate-400 hover:text-slate-200 text-[11px] flex items-center gap-1 hover:underline"
+          title="Restore default parameters"
+        >
+          <RefreshCw className="w-3 h-3" />
+          <span>Defaults</span>
+        </button>
+      </div>
+
+      <div className="space-y-4 text-xs">
+        {categories.map((cat) => {
+          const catParams = parameters.filter((p) => (p.category || 'General') === cat);
+          return (
+            <div key={cat} className="space-y-2.5">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-slate-500 font-semibold">
+                {cat}
+              </div>
+
+              {catParams.map((param) => {
+                const curVal = values[param.id] ?? param.defaultValue;
+
+                return (
+                  <div key={param.id} className="bg-slate-950/60 p-2 rounded border border-slate-800/80">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label htmlFor={`param-${param.id}`} className="font-medium text-slate-300 flex items-center gap-1 cursor-pointer">
+                        <span>{param.label}</span>
+                        {param.description && (
+                          <span title={param.description}>
+                            <HelpCircle className="w-3 h-3 text-slate-500 hover:text-slate-300" />
+                          </span>
+                        )}
+                      </label>
+
+                      {/* Display current value badge */}
+                      <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700">
+                        {typeof curVal === 'boolean'
+                          ? curVal ? 'ENABLED' : 'DISABLED'
+                          : `${curVal}${param.unit ? ` ${param.unit}` : ''}`}
+                      </span>
+                    </div>
+
+                    {/* Range / Slider */}
+                    {param.type === 'range' && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-500 font-mono">{param.min}</span>
+                        <input
+                          id={`param-${param.id}`}
+                          type="range"
+                          min={param.min}
+                          max={param.max}
+                          step={param.step || 1}
+                          value={curVal}
+                          onChange={(e) => onChange(param.id, Number(e.target.value))}
+                          className="flex-1 accent-cyan-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                        />
+                        <span className="text-[10px] text-slate-500 font-mono">{param.max}</span>
+                      </div>
+                    )}
+
+                    {/* Boolean Toggle */}
+                    {param.type === 'boolean' && (
+                      <div className="flex items-center gap-2 mt-1">
+                        <button
+                          type="button"
+                          id={`param-${param.id}`}
+                          onClick={() => onChange(param.id, !curVal)}
+                          className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            curVal ? 'bg-cyan-600' : 'bg-slate-800'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              curVal ? 'translate-x-4' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                        <span className="text-[11px] text-slate-400">
+                          {curVal ? 'Active in Catalyst planner' : 'Bypassed in planner'}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Select Dropdown */}
+                    {param.type === 'select' && param.options && (
+                      <select
+                        id={`param-${param.id}`}
+                        value={curVal}
+                        onChange={(e) => {
+                          const val = isNaN(Number(e.target.value)) ? e.target.value : Number(e.target.value);
+                          onChange(param.id, val);
+                        }}
+                        className="w-full mt-1 bg-slate-900 border border-slate-700 text-slate-200 rounded px-2 py-1 text-xs outline-none focus:border-cyan-500"
+                      >
+                        {param.options.map((opt) => (
+                          <option key={String(opt.value)} value={String(opt.value)}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/components/TelemetryMatrix.tsx ===
+import React from 'react';
+import { MetricDefinition } from '../types/simulation';
+import {
+  Activity,
+  Zap,
+  TrendingDown,
+  TrendingUp,
+  AlertTriangle,
+  Info,
+  CheckCircle,
+  HardDrive,
+  Cpu,
+  Network
+} from 'lucide-react';
+
+interface TelemetryMatrixProps {
+  metrics: MetricDefinition[];
+  values: Record<string, number>;
+  previousValues?: Record<string, number>;
+  topicId?: string;
+  step: number;
+}
+
+export function TelemetryMatrix({
+  metrics,
+  values,
+  previousValues,
+  topicId,
+  step,
+}: TelemetryMatrixProps) {
+  // Generate causal explanation based on real state metrics
+  const getTelemetryAnalysis = () => {
+    const shuffle = values['shuffleVolumeMB'] ?? 0;
+    const latency = values['estimatedLatencyMs'] ?? 0;
+    const scanned = values['scannedRows'] ?? 0;
+    const codegen = values['codegenLines'] ?? 0;
+
+    if (shuffle === 0 && latency < 400) {
+      return {
+        status: 'optimal',
+        title: 'High-Efficiency Broadcast Execution',
+        description: 'Zero network shuffle detected. Small table fits inside autoBroadcastJoinThreshold, allowing BroadcastHashJoin with in-memory hash probe and low latency.',
+      };
+    }
+
+    if (shuffle > 0) {
+      return {
+        status: 'warning',
+        title: 'Shuffle Network Saturation Detected',
+        description: `Query triggered SortMergeJoin with ${values['shuffleExchanges'] || 2} ShuffleExchange stages, redistributing ${shuffle} MB across cluster network interfaces. Consider increasing broadcast threshold or filtering join inputs.`,
+      };
+    }
+
+    if (scanned > 5000000) {
+      return {
+        status: 'warning',
+        title: 'Heavy Disk Scan I/O',
+        description: `${scanned.toLocaleString()} rows being scanned. Predicate pushdown may be disabled or column pruning unoptimized.`,
+      };
+    }
+
+    return {
+      status: 'neutral',
+      title: 'Normal Pipelined Execution',
+      description: 'Catalyst rules have structured the query plan. Pipelined execution stages are preparing distributed partitions.',
+    };
+  };
+
+  const analysis = getTelemetryAnalysis();
+
+  return (
+    <div id="telemetry-matrix" className="bg-slate-900 border border-slate-800 rounded-lg p-3 text-slate-200">
+      <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-800 text-xs">
+        <div className="flex items-center gap-1.5 font-semibold text-slate-300">
+          <Activity className="w-3.5 h-3.5 text-cyan-400" />
+          <span>Execution Telemetry Matrix</span>
+        </div>
+        <span className="text-[10px] text-slate-500 font-mono">STEP {step + 1} STATE</span>
+      </div>
+
+      {/* Grid of Metric Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 mb-3">
+        {metrics.map((m) => {
+          const val = values[m.id] ?? 0;
+          const prevVal = previousValues ? previousValues[m.id] : undefined;
+          const diff = prevVal !== undefined ? val - prevVal : 0;
+
+          return (
+            <div
+              key={m.id}
+              className={`p-2 rounded border bg-slate-950/70 ${
+                m.isKeyMetric ? 'border-slate-700 shadow-sm' : 'border-slate-800/80'
+              }`}
+            >
+              <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+                <span className="truncate" title={m.label}>{m.label}</span>
+                {m.unit && <span className="text-[10px] text-slate-500 font-mono">{m.unit}</span>}
+              </div>
+
+              <div className="flex items-baseline justify-between">
+                <div className="text-sm sm:text-base font-bold font-mono text-cyan-300">
+                  {typeof val === 'number' ? val.toLocaleString() : val}
+                </div>
+
+                {/* Delta indicator if changed */}
+                {diff !== 0 && (
+                  <div
+                    className={`text-[10px] font-mono flex items-center ${
+                      diff < 0 ? 'text-emerald-400' : 'text-amber-400'
+                    }`}
+                  >
+                    {diff > 0 ? `+${diff}` : `${diff}`}
+                  </div>
+                )}
+              </div>
+
+              {m.description && (
+                <div className="text-[9px] text-slate-500 truncate mt-1" title={m.description}>
+                  {m.description}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Telemetry Interpretation Card (Required by #27) */}
+      <div
+        className={`p-2.5 rounded border text-xs flex items-start gap-2 ${
+          analysis.status === 'optimal'
+            ? 'bg-emerald-950/40 border-emerald-800/70 text-emerald-300'
+            : analysis.status === 'warning'
+            ? 'bg-amber-950/40 border-amber-800/70 text-amber-300'
+            : 'bg-slate-950 border-slate-800 text-slate-300'
+        }`}
+      >
+        {analysis.status === 'optimal' ? (
+          <CheckCircle className="w-4 h-4 flex-shrink-0 text-emerald-400 mt-0.5" />
+        ) : analysis.status === 'warning' ? (
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-400 mt-0.5" />
+        ) : (
+          <Info className="w-4 h-4 flex-shrink-0 text-cyan-400 mt-0.5" />
+        )}
+        <div className="flex-1">
+          <span className="font-semibold block text-[11px] uppercase tracking-wider mb-0.5">
+            Telemetry Analysis: {analysis.title}
+          </span>
+          <p className="text-[11px] leading-relaxed text-slate-300 opacity-90">
+            {analysis.description}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/components/TimelineEventLog.tsx ===
+import { useState } from 'react';
+import { SimulationEvent } from '../types/simulation';
+import { Clock, ListOrdered, ChevronRight, Zap, CheckCircle2 } from 'lucide-react';
+
+interface TimelineEventLogProps {
+  events: SimulationEvent[];
+  currentStep: number;
+  totalSteps: number;
+  onSelectStep: (step: number) => void;
+}
+
+export function TimelineEventLog({
+  events,
+  currentStep,
+  totalSteps,
+  onSelectStep,
+}: TimelineEventLogProps) {
+  const [activeView, setActiveView] = useState<'timeline' | 'log'>('timeline');
+
+  return (
+    <div id="timeline-eventlog" className="bg-slate-900 border border-slate-800 rounded-lg p-3 text-slate-200">
+      {/* Header & View Switcher */}
+      <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-slate-800 text-xs">
+        <div className="flex items-center gap-1.5 font-semibold text-slate-300">
+          <Clock className="w-3.5 h-3.5 text-cyan-400" />
+          <span>Execution Timeline & Trace</span>
+        </div>
+
+        <div className="flex items-center bg-slate-950 p-0.5 rounded border border-slate-800 text-[11px]">
+          <button
+            onClick={() => setActiveView('timeline')}
+            className={`px-2 py-0.5 rounded transition-colors ${
+              activeView === 'timeline' ? 'bg-slate-800 text-cyan-300 font-medium' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Visual Track
+          </button>
+          <button
+            onClick={() => setActiveView('log')}
+            className={`px-2 py-0.5 rounded transition-colors ${
+              activeView === 'log' ? 'bg-slate-800 text-cyan-300 font-medium' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Trace Log ({events.length})
+          </button>
+        </div>
+      </div>
+
+      {/* VIEW 1: Visual Scrubber Timeline */}
+      {activeView === 'timeline' && (
+        <div className="py-2">
+          {/* Progress bar container */}
+          <div className="relative flex items-center justify-between">
+            {/* Horizontal connecting track line */}
+            <div className="absolute left-3 right-3 top-1/2 -translate-y-1/2 h-1 bg-slate-800 rounded z-0" />
+            <div
+              className="absolute left-3 top-1/2 -translate-y-1/2 h-1 bg-cyan-600 rounded z-0 transition-all duration-300"
+              style={{
+                width: `${totalSteps > 1 ? (currentStep / (totalSteps - 1)) * 95 : 0}%`,
+              }}
+            />
+
+            {/* Step markers */}
+            {Array.from({ length: totalSteps }).map((_, idx) => {
+              const isPast = idx < currentStep;
+              const isCurrent = idx === currentStep;
+              const evt = events[idx];
+
+              return (
+                <button
+                  key={idx}
+                  onClick={() => onSelectStep(idx)}
+                  className={`relative z-10 flex flex-col items-center group focus:outline-none`}
+                  title={`Jump to Step ${idx + 1}: ${evt?.label || 'Step'}`}
+                >
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center font-mono text-[11px] font-bold border transition-all ${
+                      isCurrent
+                        ? 'bg-cyan-500 border-white text-slate-950 scale-110 shadow-md shadow-cyan-900 ring-2 ring-cyan-400'
+                        : isPast
+                        ? 'bg-slate-800 border-cyan-700 text-cyan-300 hover:bg-slate-700'
+                        : 'bg-slate-950 border-slate-800 text-slate-600 hover:border-slate-700'
+                    }`}
+                  >
+                    {idx + 1}
+                  </div>
+
+                  <span
+                    className={`text-[9px] font-mono mt-1 max-w-[80px] text-center truncate ${
+                      isCurrent ? 'text-cyan-300 font-bold' : 'text-slate-500 group-hover:text-slate-300'
+                    }`}
+                  >
+                    {evt?.label ? evt.label.split(' ')[0] : `S${idx}`}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* VIEW 2: Chronological Event Log */}
+      {activeView === 'log' && (
+        <div className="max-h-44 overflow-auto space-y-1.5 pr-1 font-mono text-xs">
+          {events.map((evt, idx) => {
+            const isCurrent = evt.step === currentStep;
+
+            return (
+              <div
+                key={evt.id || idx}
+                onClick={() => onSelectStep(evt.step)}
+                className={`p-2 rounded border cursor-pointer transition-colors flex items-center justify-between gap-2 ${
+                  isCurrent
+                    ? 'bg-cyan-950/60 border-cyan-600 text-cyan-200 font-semibold'
+                    : 'bg-slate-950/60 border-slate-800/80 text-slate-400 hover:bg-slate-800/60'
+                }`}
+              >
+                <div className="flex items-center gap-2 truncate">
+                  <span className="text-[10px] text-slate-500">[{evt.timestamp}]</span>
+                  <span className="text-[10px] px-1 py-0.2 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                    STEP {evt.step + 1}
+                  </span>
+                  <span className="text-slate-200 truncate">{evt.label}</span>
+                </div>
+
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {evt.sourceLine && (
+                    <span className="text-[10px] text-indigo-400">Line {evt.sourceLine}</span>
+                  )}
+                  {isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/components/TopicDocsModal.tsx ===
+import React from 'react';
+import { TopicDocs } from '../types/simulation';
+import { X, BookOpen, CheckCircle, Info, Cpu, Sparkles } from 'lucide-react';
+
+interface TopicDocsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  topicName: string;
+  docs: TopicDocs;
+}
+
+export function TopicDocsModal({
+  isOpen,
+  onClose,
+  topicName,
+  docs,
+}: TopicDocsModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-w-3xl w-full max-h-[85vh] flex flex-col overflow-hidden text-slate-200">
+        {/* Header */}
+        <div className="bg-slate-950 px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-4 h-4 text-cyan-400" />
+            <span className="font-bold text-sm">Catalyst Architectural Guide: {topicName}</span>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-auto p-4 space-y-4 text-xs leading-relaxed">
+          {/* Section 1: Overview */}
+          <div className="bg-slate-950 p-3 rounded border border-slate-800">
+            <span className="font-semibold text-cyan-300 font-mono text-[11px] uppercase block mb-1">
+              1. System Overview
+            </span>
+            <p className="text-slate-300">{docs.overview}</p>
+          </div>
+
+          {/* Section 2: Four Core Catalyst Phases */}
+          <div className="bg-slate-950 p-3 rounded border border-slate-800 space-y-2">
+            <span className="font-semibold text-indigo-300 font-mono text-[11px] uppercase block">
+              2. The 4 Catalyst Optimization Phases
+            </span>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+              <div className="p-2 rounded bg-slate-900 border border-slate-800">
+                <strong className="text-cyan-300 block mb-0.5">Phase 1: Analysis</strong>
+                <p className="text-slate-400">
+                  Resolves <code className="text-slate-300">UnresolvedRelation</code> and <code className="text-slate-300">UnresolvedAttribute</code> nodes using the Spark SessionCatalog, attaching verifiable types and unique Expression IDs.
+                </p>
+              </div>
+
+              <div className="p-2 rounded bg-slate-900 border border-slate-800">
+                <strong className="text-emerald-300 block mb-0.5">Phase 2: Logical Optimization</strong>
+                <p className="text-slate-400">
+                  Executes rule batches (RBO) via fixed-point iterations. Pushes filter predicates to scans, prunes unused columns, folds static constant math, and propagates nulls.
+                </p>
+              </div>
+
+              <div className="p-2 rounded bg-slate-900 border border-slate-800">
+                <strong className="text-purple-300 block mb-0.5">Phase 3: Physical Planning</strong>
+                <p className="text-slate-400">
+                  Transforms logical relations into executable <code className="text-slate-300">SparkPlan</code> operators. Evaluates join strategies (BroadcastHashJoin vs SortMergeJoin) and inserts Shuffle Exchanges.
+                </p>
+              </div>
+
+              <div className="p-2 rounded bg-slate-900 border border-slate-800">
+                <strong className="text-amber-300 block mb-0.5">Phase 4: Whole-Stage Codegen</strong>
+                <p className="text-slate-400">
+                  Project Tungsten synthesizes unified Java classes and compiles them in-memory using Janino, eliminating virtual method invocations and pipelining rows in CPU registers.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: Important Concepts */}
+          <div className="bg-slate-950 p-3 rounded border border-slate-800">
+            <span className="font-semibold text-cyan-300 font-mono text-[11px] uppercase block mb-1.5">
+              3. Key Engineering Concepts
+            </span>
+            <ul className="space-y-1.5">
+              {docs.importantConcepts.map((c, i) => (
+                <li key={i} className="flex items-start gap-1.5 text-slate-300">
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0 mt-0.5" />
+                  <span>{c}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Section 4: Performance Implications */}
+          <div className="bg-slate-950 p-3 rounded border border-slate-800">
+            <span className="font-semibold text-emerald-400 font-mono text-[11px] uppercase block mb-1">
+              4. Performance Tuning & Best Practices
+            </span>
+            <p className="text-slate-300">{docs.performanceImplications}</p>
+          </div>
+
+          {/* Section 5: Simulation Notes */}
+          <div className="bg-indigo-950/30 border border-indigo-800/60 p-3 rounded text-[11px] text-indigo-300">
+            <strong className="block mb-0.5 font-mono text-indigo-200">Simulation Fidelity Notice:</strong>
+            {docs.simulationNotes}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="bg-slate-950 px-4 py-2.5 border-t border-slate-800 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold rounded text-xs transition-colors"
+          >
+            Got It
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/components/VisualizerRouter.tsx ===
+import React from 'react';
+import { SimulationTopic } from '../types/simulation';
+import { CatalystVisualizer } from './CatalystVisualizer';
+import { VolcanoVisualizer } from './VolcanoVisualizer';
+
+interface VisualizerRouterProps {
+  topic: SimulationTopic;
+  state: any;
+}
+
+export function VisualizerRouter({ topic, state }: VisualizerRouterProps) {
+  if (topic.id === 'spark_catalyst') {
+    return <CatalystVisualizer state={state} />;
+  }
+
+  if (topic.id === 'volcano_optimizer') {
+    return <VolcanoVisualizer state={state} />;
+  }
+
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded p-6 text-center text-slate-400">
+      Visualizer not registered for topic: {topic.name}
+    </div>
+  );
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/components/VolcanoVisualizer.tsx ===
+import React from 'react';
+import { VolcanoState } from '../topics/volcanoOptimizer/definition';
+import { Database, Search, Cpu, CheckCircle } from 'lucide-react';
+
+interface VolcanoVisualizerProps {
+  state: VolcanoState;
+}
+
+export function VolcanoVisualizer({ state }: VolcanoVisualizerProps) {
+  return (
+    <div id="volcano-visualizer" className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col h-[520px] overflow-hidden text-xs">
+      <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
+        <div className="flex items-center gap-2">
+          <Database className="w-4 h-4 text-cyan-400" />
+          <span className="font-bold text-slate-200 text-sm">Volcano / Cascades Dynamic Programming Memo</span>
+        </div>
+        <span className="px-2 py-0.5 rounded bg-indigo-950 border border-indigo-800 text-indigo-300 font-mono">
+          Phase: {state.phase}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 overflow-hidden">
+        {/* Memo Equivalence Groups */}
+        <div className="bg-slate-950 border border-slate-800 rounded p-3 flex flex-col">
+          <div className="font-semibold text-slate-300 mb-2 flex items-center gap-1.5">
+            <Search className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Memo Equivalence Groups & Candidates</span>
+          </div>
+
+          <div className="flex-1 overflow-auto space-y-2">
+            {state.memoTable.length === 0 ? (
+              <div className="text-slate-500 py-8 text-center">Memo space being populated during initialization...</div>
+            ) : (
+              state.memoTable.map((item, idx) => (
+                <div
+                  key={idx}
+                  className={`p-2 rounded border font-mono flex items-center justify-between ${
+                    item.isWinner
+                      ? 'bg-emerald-950/30 border-emerald-800 text-emerald-200'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 opacity-60'
+                  }`}
+                >
+                  <div>
+                    <span className="text-[10px] text-slate-500 mr-2">{item.group}</span>
+                    <span className="font-medium">{item.operator}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px]">Cost: {item.cost}</span>
+                    {item.isWinner && <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Plan Evaluation Status */}
+        <div className="bg-slate-950 border border-slate-800 rounded p-3 flex flex-col justify-between">
+          <div>
+            <div className="font-semibold text-slate-300 mb-2 flex items-center gap-1.5">
+              <Cpu className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Active Cost-Based Plan Selection</span>
+            </div>
+
+            <div className="p-3 bg-slate-900 rounded border border-slate-800 font-mono text-cyan-300 mb-3">
+              {state.selectedPlan}
+            </div>
+
+            <div className="space-y-2 text-slate-400">
+              <div className="text-[11px]">
+                <strong className="text-slate-300">Active Operation:</strong> {state.activeOperation}
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                The Volcano engine branches candidate physical algorithms (Index Scan vs Seq Scan, Nested Loop vs Hash Join) and preserves the cheapest plan in the Memo table.
+              </p>
+            </div>
+          </div>
+
+          <div className="p-2 bg-indigo-950/40 border border-indigo-800/60 rounded text-[11px] text-indigo-300">
+            Rule transformations maintain logical equivalence while evaluating physical execution costs.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/components/Workbench.tsx ===
+import { useState, useEffect } from 'react';
+import {
+  Copy,
+  ArrowRight,
+  PlayCircle,
+  AlertCircle,
+  Check,
+  FileCode,
+  Sparkles,
+  Lock,
+  Edit3
+} from 'lucide-react';
+import { ValidationResult } from '../types/simulation';
+import { WorkbenchView } from './Header';
+
+interface WorkbenchProps {
+  benchmarkCode: string;
+  editCode: string;
+  onChangeEditCode: (newCode: string) => void;
+  activeLine?: number;
+  view: WorkbenchView;
+  validationResult?: ValidationResult;
+  onExecuteCustom: () => void;
+  onCopyToEditSpace: () => void;
+  isExecuting?: boolean;
+}
+
+export function Workbench({
+  benchmarkCode,
+  editCode,
+  onChangeEditCode,
+  activeLine,
+  view,
+  validationResult,
+  onExecuteCustom,
+  onCopyToEditSpace,
+  isExecuting,
+}: WorkbenchProps) {
+  const [copiedBenchmark, setCopiedBenchmark] = useState(false);
+
+  const benchmarkLines = benchmarkCode.split('\n');
+  const editLines = editCode.split('\n');
+
+  const handleCopyBenchmark = () => {
+    navigator.clipboard.writeText(benchmarkCode);
+    setCopiedBenchmark(true);
+    setTimeout(() => setCopiedBenchmark(false), 2000);
+  };
+
+  const hasErrors = validationResult && !validationResult.isValid;
+
+  // Keyboard shortcut Ctrl+Enter or Cmd+Enter to execute custom query
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        onExecuteCustom();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onExecuteCustom]);
+
+  return (
+    <div id="workbench-container" className="bg-slate-950 border-b border-slate-800">
+      <div className={`grid ${view === 'split' ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'} divide-y lg:divide-y-0 lg:divide-x divide-slate-800`}>
+        {/* PANEL A: DEFAULT BENCHMARK (Read-only) */}
+        {(view === 'split' || view === 'benchmark') && (
+          <div id="panel-default-benchmark" className="flex flex-col h-[280px] bg-slate-950">
+            {/* Benchmark Toolbar */}
+            <div className="bg-slate-900/90 px-3 py-1.5 border-b border-slate-800 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1.5 text-slate-300 font-mono">
+                <Lock className="w-3.5 h-3.5 text-slate-500" />
+                <span className="font-semibold text-slate-200">Default Benchmark</span>
+                <span className="text-[10px] px-1 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">READ-ONLY</span>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  id="btn-copy-to-edit"
+                  onClick={onCopyToEditSpace}
+                  className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 hover:text-cyan-200 border border-slate-700 rounded text-[11px] flex items-center gap-1 transition-colors"
+                  title="Copy benchmark query into the editable space"
+                >
+                  <ArrowRight className="w-3 h-3 text-cyan-400" />
+                  <span>Copy to Edit Space</span>
+                </button>
+
+                <button
+                  id="btn-copy-benchmark-raw"
+                  onClick={handleCopyBenchmark}
+                  className="p-1 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded transition-colors"
+                  title="Copy to clipboard"
+                >
+                  {copiedBenchmark ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Benchmark Code View with active instruction cursor */}
+            <div className="flex-1 overflow-auto p-2 font-mono text-xs text-slate-300 leading-relaxed select-text">
+              <table className="w-full border-collapse">
+                <tbody>
+                  {benchmarkLines.map((line, idx) => {
+                    const lineNum = idx + 1;
+                    const isActive = activeLine === lineNum;
+                    const isComment = line.trim().startsWith('--');
+
+                    return (
+                      <tr
+                        key={idx}
+                        className={`transition-colors ${
+                          isActive
+                            ? 'bg-cyan-950/60 border-l-2 border-cyan-400 text-cyan-100 font-semibold'
+                            : 'hover:bg-slate-900/40'
+                        }`}
+                      >
+                        <td className="w-8 text-right pr-3 select-none text-slate-600 text-[11px] font-mono align-top py-0.5">
+                          {lineNum}
+                        </td>
+                        <td className="py-0.5 whitespace-pre font-mono">
+                          {isActive && (
+                            <span className="inline-block w-2 h-2 rounded-full bg-cyan-400 mr-1.5 animate-pulse" />
+                          )}
+                          <span className={isComment ? 'text-slate-500 italic' : highlightSqlKeywords(line)}>
+                            {line}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* PANEL B: INTERACTIVE EDIT SPACE (Editable) */}
+        {(view === 'split' || view === 'edit') && (
+          <div id="panel-interactive-edit" className="flex flex-col h-[280px] bg-slate-950">
+            {/* Edit Space Toolbar */}
+            <div className="bg-slate-900/90 px-3 py-1.5 border-b border-slate-800 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1.5 text-slate-300 font-mono">
+                <Edit3 className="w-3.5 h-3.5 text-amber-400" />
+                <span className="font-semibold text-slate-200">Interactive Edit Space</span>
+                <span className="text-[10px] px-1 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800">CUSTOM</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-500 hidden sm:inline font-mono">
+                  Ctrl+Enter to Run
+                </span>
+                <button
+                  id="btn-execute-manually"
+                  onClick={onExecuteCustom}
+                  disabled={isExecuting}
+                  className="px-3 py-1 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 active:scale-95 text-slate-950 font-bold rounded text-xs flex items-center gap-1.5 transition-all shadow-md"
+                  title="Parse and execute modified query deterministically"
+                >
+                  <PlayCircle className="w-3.5 h-3.5" />
+                  <span>Execute Manually</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Inline validation issues if any */}
+            {hasErrors && validationResult?.issues && (
+              <div className="bg-rose-950/70 border-b border-rose-800/80 px-3 py-1 text-xs text-rose-300 flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 text-rose-400" />
+                <span className="truncate">
+                  {validationResult.issues[0].message}
+                </span>
+              </div>
+            )}
+
+            {/* Code Textarea with line numbers */}
+            <div className="flex-1 relative flex overflow-hidden">
+              {/* Line numbers gutter */}
+              <div className="w-9 bg-slate-900/60 border-r border-slate-800/60 p-2 text-right select-none font-mono text-[11px] text-slate-600 leading-relaxed">
+                {editLines.map((_, i) => (
+                  <div key={i}>{i + 1}</div>
+                ))}
+              </div>
+
+              {/* Textarea */}
+              <textarea
+                id="interactive-code-editor"
+                value={editCode}
+                onChange={(e) => onChangeEditCode(e.target.value)}
+                spellCheck={false}
+                className="flex-1 p-2 bg-transparent font-mono text-xs text-slate-200 resize-none outline-none leading-relaxed overflow-auto selection:bg-cyan-900"
+                placeholder="Enter custom SQL or Spark query definition here..."
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Simple syntax-aware class assigner for readable queries
+function highlightSqlKeywords(line: string): string {
+  const trimmed = line.trim().toUpperCase();
+  if (trimmed.startsWith('SELECT') || trimmed.startsWith('FROM') || trimmed.startsWith('WHERE') || trimmed.startsWith('JOIN') || trimmed.startsWith('ORDER BY') || trimmed.startsWith('GROUP BY')) {
+    return 'text-cyan-300 font-medium';
+  }
+  if (line.includes('AND ') || line.includes('OR ') || line.includes('ON ')) {
+    return 'text-indigo-300';
+  }
+  return 'text-slate-200';
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/index.css ===
+@import "tailwindcss";
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/main.tsx ===
+import {StrictMode} from 'react';
+import {createRoot} from 'react-dom/client';
+import App from './App.tsx';
+import './index.css';
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+);
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/topics/registry.ts ===
+import { SimulationTopic } from '../types/simulation';
+import { SPARK_CATALYST_TOPIC } from './sparkCatalyst/definition';
+import { VOLCANO_OPTIMIZER_TOPIC } from './volcanoOptimizer/definition';
+
+export const SIMULATION_TOPICS: SimulationTopic[] = [
+  SPARK_CATALYST_TOPIC,
+  VOLCANO_OPTIMIZER_TOPIC,
+];
+
+export function getTopicById(id: string): SimulationTopic {
+  const found = SIMULATION_TOPICS.find((t) => t.id === id);
+  return found || SPARK_CATALYST_TOPIC;
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/topics/sparkCatalyst/catalog.ts ===
+import { PlanAttribute } from '../../types/catalyst';
+
+export interface CatalogTable {
+  tableName: string;
+  rowCount: number;
+  sizeBytes: number;
+  fileFormat: string;
+  location: string;
+  schema: PlanAttribute[];
+}
+
+export const SPARK_CATALOG: Record<string, CatalogTable> = {
+  customers: {
+    tableName: 'customers',
+    rowCount: 250000,
+    sizeBytes: 8 * 1024 * 1024, // 8 MB
+    fileFormat: 'Parquet (Snappy)',
+    location: 'hdfs://lakehouse/data/gold/customers',
+    schema: [
+      { name: 'customer_id', dataType: 'LongType', nullable: false },
+      { name: 'customer_name', dataType: 'StringType', nullable: true },
+      { name: 'tier', dataType: 'StringType', nullable: true },
+      { name: 'country', dataType: 'StringType', nullable: true },
+      { name: 'signup_date', dataType: 'DateType', nullable: true },
+    ],
+  },
+  orders: {
+    tableName: 'orders',
+    rowCount: 12500000,
+    sizeBytes: 450 * 1024 * 1024, // 450 MB
+    fileFormat: 'Parquet (Snappy)',
+    location: 'hdfs://lakehouse/data/gold/orders',
+    schema: [
+      { name: 'order_id', dataType: 'LongType', nullable: false },
+      { name: 'customer_id', dataType: 'LongType', nullable: false },
+      { name: 'product_id', dataType: 'LongType', nullable: false },
+      { name: 'order_amount', dataType: 'DecimalType(10,2)', nullable: false },
+      { name: 'order_date', dataType: 'DateType', nullable: false },
+      { name: 'region', dataType: 'StringType', nullable: true },
+      { name: 'status', dataType: 'StringType', nullable: false },
+      { name: 'tax_rate', dataType: 'DoubleType', nullable: true },
+      { name: 'quantity', dataType: 'IntegerType', nullable: true },
+    ],
+  },
+  transactions: {
+    tableName: 'transactions',
+    rowCount: 20000000,
+    sizeBytes: 850 * 1024 * 1024, // 850 MB
+    fileFormat: 'Delta Lake',
+    location: 's3a://fintech-lake/transactions',
+    schema: [
+      { name: 'transaction_id', dataType: 'StringType', nullable: false },
+      { name: 'account_id', dataType: 'StringType', nullable: false },
+      { name: 'amount', dataType: 'DecimalType(12,2)', nullable: false },
+      { name: 'timestamp', dataType: 'TimestampType', nullable: false },
+      { name: 'status', dataType: 'StringType', nullable: false },
+    ],
+  },
+  accounts: {
+    tableName: 'accounts',
+    rowCount: 1500000,
+    sizeBytes: 120 * 1024 * 1024, // 120 MB
+    fileFormat: 'Delta Lake',
+    location: 's3a://fintech-lake/accounts',
+    schema: [
+      { name: 'account_id', dataType: 'StringType', nullable: false },
+      { name: 'account_type', dataType: 'StringType', nullable: false },
+      { name: 'risk_score', dataType: 'IntegerType', nullable: true },
+      { name: 'status', dataType: 'StringType', nullable: false },
+      { name: 'balance', dataType: 'DecimalType(12,2)', nullable: false },
+    ],
+  },
+  products: {
+    tableName: 'products',
+    rowCount: 80000,
+    sizeBytes: 4 * 1024 * 1024, // 4 MB
+    fileFormat: 'Parquet (Snappy)',
+    location: 'hdfs://lakehouse/data/gold/products',
+    schema: [
+      { name: 'product_id', dataType: 'LongType', nullable: false },
+      { name: 'product_name', dataType: 'StringType', nullable: false },
+      { name: 'category', dataType: 'StringType', nullable: false },
+      { name: 'price', dataType: 'DecimalType(8,2)', nullable: false },
+      { name: 'stock', dataType: 'IntegerType', nullable: false },
+    ],
+  }
+};
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/topics/sparkCatalyst/codegen.ts ===
+/**
+ * WholeStageCodegen code generator.
+ * Synthesizes the Janino Java bytecode representation corresponding to the physical plan.
+ */
+
+export interface CodegenConfig {
+  joinType: string;
+  hasFilter: boolean;
+  filterPushedToScan: boolean;
+  columnsPruned: boolean;
+  wholeStageEnabled: boolean;
+  tableName1: string;
+  tableName2?: string;
+}
+
+export function generateJaninoJavaCode(config: CodegenConfig): string {
+  if (!config.wholeStageEnabled) {
+    return `// Whole-Stage Code Generation is DISABLED (spark.sql.codegen.wholeStage = false)
+// Spark falls back to Volcano Iterator Model with virtual method invocation:
+//
+// while (child.hasNext()) {
+//     InternalRow row = child.next();
+//     if (filter.eval(row)) {
+//         return project.eval(row);
+//     }
+// }
+// ⚠️ High CPU cache misses and heavy virtual function call dispatch per row.`;
+  }
+
+  const isBroadcast = config.joinType === 'BroadcastHashJoin';
+
+  return `/* 
+ * Apache Spark Whole-Stage Java Code Generation (Janino Compiler)
+ * Stage 1 / GeneratedIteratorForCodegenStage1
+ * Project Tungsten: Zero virtual dispatch, unrolled CPU pipelining
+ */
+package org.apache.spark.sql.catalyst.expressions;
+
+import org.apache.spark.sql.execution.BufferedRowIterator;
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
+import org.apache.spark.sql.execution.joins.LongHashedRelation;
+
+public final class GeneratedIteratorForCodegenStage1 extends BufferedRowIterator {
+    private scala.collection.Iterator<InternalRow> inputScan;
+    ${isBroadcast ? 'private LongHashedRelation broadcastRelation;' : ''}
+    private UnsafeRowWriter rowWriter;
+
+    public GeneratedIteratorForCodegenStage1(Object[] references) {
+        this.inputScan = (scala.collection.Iterator<InternalRow>) references[0];
+        ${isBroadcast ? 'this.broadcastRelation = (LongHashedRelation) references[1];' : ''}
+        this.rowWriter = new UnsafeRowWriter(6, 64);
+    }
+
+    @Override
+    protected void processNext() throws java.io.IOException {
+        // Direct unrolled while loop over partition batches (no virtual next() calls)
+        while (inputScan.hasNext()) {
+            InternalRow scanRow = (InternalRow) inputScan.next();
+
+            ${!config.filterPushedToScan && config.hasFilter ? `// In-Memory Filter evaluation
+            long amount = scanRow.getLong(3);
+            if (!(amount > 25000L)) {
+                continue; // Predicate rejected
+            }` : '// [Filter Pushdown Active]: Predicate evaluated in Parquet Vectorized Reader'}
+
+            ${isBroadcast ? `// Fast Broadcast Hash Table Probe (O(1) memory lookup)
+            long joinKey = scanRow.getLong(1);
+            InternalRow matchedBuildRow = broadcastRelation.getValue(joinKey);
+            if (matchedBuildRow == null) {
+                continue; // Inner join condition failed
+            }` : `// Stream side record passed to downstream SortMergeJoin buffer`}
+
+            // Materialize Tungsten UnsafeRow into off-heap memory buffer
+            rowWriter.reset();
+            rowWriter.write(0, scanRow.getLong(0));   // order_id
+            rowWriter.write(1, scanRow.getLong(1));   // customer_id
+            ${isBroadcast ? 'rowWriter.write(2, matchedBuildRow.getUTF8String(1)); // customer_name' : ''}
+            
+            append(rowWriter.getRow());
+            if (shouldStop()) return;
+        }
+    }
+}`;
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/topics/sparkCatalyst/definition.ts ===
+import { SimulationTopic } from '../../types/simulation';
+import { CatalystState } from '../../types/catalyst';
+import { CATALYST_PRESETS } from './presets';
+import { parseSparkQuery, validateSparkQuery } from './parser';
+import { buildCatalystSnapshots, CatalystEngineParams } from './engine';
+import { SPARK_CATALOG } from './catalog';
+
+export const SPARK_CATALYST_TOPIC: SimulationTopic<CatalystState, string> = {
+  id: 'spark_catalyst',
+  name: 'Apache Spark Catalyst Query Optimizer',
+  shortName: 'Spark Catalyst',
+  category: 'Query Compilation & Distributed Engines',
+  description: 'Deep interactive simulation of Apache Spark’s Catalyst query execution engine: AST parsing, Catalog analysis, rule-based logical optimization, physical planning (Broadcast vs Sort-Merge join), and Whole-Stage Java bytecode generation.',
+  inputLanguage: 'sql',
+  defaultCode: CATALYST_PRESETS[0].code,
+  presets: CATALYST_PRESETS,
+  parameters: [
+    {
+      id: 'autoBroadcastJoinThreshold',
+      label: 'Broadcast Join Threshold',
+      type: 'range',
+      defaultValue: 10,
+      min: 0,
+      max: 50,
+      step: 1,
+      unit: 'MB',
+      description: 'spark.sql.autoBroadcastJoinThreshold: Configures the maximum size in MB for a table that will be broadcast to all worker nodes. Setting to 0 disables broadcast and forces SortMergeJoin.',
+      category: 'Physical Planning'
+    },
+    {
+      id: 'enableCBO',
+      label: 'Cost-Based Optimizer (CBO)',
+      type: 'boolean',
+      defaultValue: true,
+      description: 'spark.sql.cbo.enabled: Enables table statistics collection, column histograms, and dynamic join reordering.',
+      category: 'Cost Model'
+    },
+    {
+      id: 'predicatePushdown',
+      label: 'Predicate Pushdown',
+      type: 'boolean',
+      defaultValue: true,
+      description: 'spark.sql.optimizer.predicatePushdown: Pushes filter conditions below joins directly into the storage scan (Parquet/Delta).',
+      category: 'Logical Rules'
+    },
+    {
+      id: 'columnPruning',
+      label: 'Column Pruning',
+      type: 'boolean',
+      defaultValue: true,
+      description: 'spark.sql.optimizer.columnPruning: Eliminates unreferenced columns from scan schemas to prevent reading unused data blocks.',
+      category: 'Logical Rules'
+    },
+    {
+      id: 'wholeStageCodegen',
+      label: 'Whole-Stage Code Generation',
+      type: 'boolean',
+      defaultValue: true,
+      description: 'spark.sql.codegen.wholeStage: Synthesizes a unified Java class compiled via Janino, eliminating virtual method invocations and running inside CPU registers.',
+      category: 'Runtime / Tungsten'
+    },
+    {
+      id: 'shufflePartitions',
+      label: 'Shuffle Partitions',
+      type: 'select',
+      defaultValue: 200,
+      options: [
+        { label: '5 Partitions (Development)', value: 5 },
+        { label: '200 Partitions (Default Spark)', value: 200 },
+        { label: '500 Partitions (High Scale)', value: 500 },
+      ],
+      description: 'spark.sql.shuffle.partitions: Number of partitions to use when shuffling data for joins or aggregations.',
+      category: 'Physical Planning'
+    },
+    {
+      id: 'customersTableSizeMB',
+      label: 'Customers Table Size',
+      type: 'range',
+      defaultValue: 8,
+      min: 1,
+      max: 50,
+      step: 1,
+      unit: 'MB',
+      description: 'Simulated data size of the customers table. Adjusting above the broadcast threshold triggers SortMergeJoin.',
+      category: 'Data Sizing'
+    },
+    {
+      id: 'ordersTableSizeMB',
+      label: 'Orders Table Size',
+      type: 'range',
+      defaultValue: 450,
+      min: 50,
+      max: 1000,
+      step: 25,
+      unit: 'MB',
+      description: 'Simulated data size of the orders fact table.',
+      category: 'Data Sizing'
+    },
+  ],
+  metrics: [
+    {
+      id: 'estimatedLatencyMs',
+      label: 'Est. Query Latency',
+      unit: 'ms',
+      format: 'duration',
+      description: 'Estimated end-to-end execution time on a 16-core Spark cluster.',
+      isKeyMetric: true,
+    },
+    {
+      id: 'shuffleVolumeMB',
+      label: 'Shuffle Read/Write',
+      unit: 'MB',
+      format: 'bytes',
+      description: 'Total data redistributed across worker network interfaces.',
+      isKeyMetric: true,
+    },
+    {
+      id: 'shuffleExchanges',
+      label: 'Network Shuffle Stages',
+      unit: 'stages',
+      format: 'count',
+      description: 'Number of ShuffleExchangeExec boundary operators introduced into the physical plan.',
+      isKeyMetric: true,
+    },
+    {
+      id: 'scannedRows',
+      label: 'Scanned Rows',
+      format: 'number',
+      description: 'Total rows read from underlying storage after predicate pushdown evaluation.',
+    },
+    {
+      id: 'projectedMemoryMB',
+      label: 'Peak Working Memory',
+      unit: 'MB',
+      format: 'bytes',
+      description: 'Peak memory occupied by broadcast hash tables, sort buffers, and Tungsten unsafe rows.',
+    },
+    {
+      id: 'appliedRulesCount',
+      label: 'Rules Evaluated',
+      format: 'count',
+      description: 'Number of pattern-matching transformation rules executed by Catalyst RuleExecutor.',
+    },
+    {
+      id: 'codegenLines',
+      label: 'Generated Java Lines',
+      format: 'count',
+      description: 'Lines of synthesized Janino Java code in the active WholeStageCodegen stage.',
+    },
+    {
+      id: 'planningTimeMs',
+      label: 'Catalyst Planning Time',
+      unit: 'ms',
+      format: 'duration',
+      description: 'CPU time spent by driver traversing and optimizing the query tree.',
+    }
+  ],
+  docs: {
+    overview: 'Apache Spark Catalyst is an extensible query optimization framework built on Scala functional programming. It transforms relational queries into highly optimized physical execution code through four consecutive phases: Analysis, Logical Optimization, Physical Planning, and Code Generation.',
+    inputs: 'Accepts Spark SQL queries or DataFrame operational chains. You can customize table references, predicates, joins, and tune configuration parameters such as autoBroadcastJoinThreshold and wholeStageCodegen.',
+    executionModel: 'Catalyst represents queries as abstract syntax trees (ASTs) of TreeNode subclasses. A RuleExecutor applies batches of transformation rules using pattern matching until a fixed-point (idempotence) is reached.',
+    importantConcepts: [
+      'Unresolved vs Resolved Plan: Attributes and relations lack types and identities until resolved against the SessionCatalog.',
+      'Rule-Based Optimization (RBO): Applies deterministic transformation rules such as PushDownPredicate, ColumnPruning, ConstantFolding, and NullPropagation.',
+      'Cost-Based Optimization (CBO): Uses table and column statistics to reorder joins and calculate physical operator costs.',
+      'BroadcastHashJoin vs SortMergeJoin: Small tables (<= threshold) are broadcast to bypass expensive network shuffles entirely.',
+      'Project Tungsten & WholeStageCodegen: Janino in-memory compiler synthesizes custom Java bytecode, eliminating JVM virtual function calls and keeping variables in CPU registers.'
+    ],
+    performanceImplications: 'Enabling Predicate Pushdown skips irrelevant Parquet blocks at the disk level. Proper broadcast thresholds prevent gigabytes of shuffle network saturation and expensive disk spills.',
+    simulationNotes: 'This simulator faithfully models the four architectural phases, rule applications, physical strategy choices, RDD stage DAGs, and synthesized Janino Java bytecode of Apache Spark 3.x.'
+  },
+
+  parse: (input: string) => {
+    const res = parseSparkQuery(input);
+    return { ast: res.parsed, error: res.error };
+  },
+
+  validate: (input: string) => {
+    return validateSparkQuery(input, Object.keys(SPARK_CATALOG));
+  },
+
+  buildExecutionPlan: (input: string, params: Record<string, any>) => {
+    const { parsed } = parseSparkQuery(input);
+    const safeParsed = parsed || parseSparkQuery(CATALYST_PRESETS[0].code).parsed!;
+    const engineParams: CatalystEngineParams = {
+      autoBroadcastJoinThreshold: params.autoBroadcastJoinThreshold ?? 10,
+      enableCBO: params.enableCBO ?? true,
+      predicatePushdown: params.predicatePushdown ?? true,
+      columnPruning: params.columnPruning ?? true,
+      wholeStageCodegen: params.wholeStageCodegen ?? true,
+      shufflePartitions: params.shufflePartitions ?? 200,
+      customersTableSizeMB: params.customersTableSizeMB ?? 8,
+      ordersTableSizeMB: params.ordersTableSizeMB ?? 450,
+    };
+
+    const steps = buildCatalystSnapshots(safeParsed, engineParams, 'DEFAULT');
+    return {
+      steps,
+      totalSteps: steps.length,
+    };
+  }
+};
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/topics/sparkCatalyst/engine.ts ===
+import { PlanNode, CatalystState, RDDStage } from '../../types/catalyst';
+import { SimulationSnapshot, SimulationEvent, StepExplanation } from '../../types/simulation';
+import { ParsedQuery } from './parser';
+import { SPARK_CATALOG } from './catalog';
+import { generateJaninoJavaCode } from './codegen';
+
+export interface CatalystEngineParams {
+  autoBroadcastJoinThreshold: number; // in MB
+  enableCBO: boolean;
+  predicatePushdown: boolean;
+  columnPruning: boolean;
+  wholeStageCodegen: boolean;
+  shufflePartitions: number;
+  customersTableSizeMB: number;
+  ordersTableSizeMB: number;
+}
+
+export function buildCatalystSnapshots(
+  parsed: ParsedQuery,
+  params: CatalystEngineParams,
+  mode: 'DEFAULT' | 'CUSTOM'
+): SimulationSnapshot<CatalystState>[] {
+  const snapshots: SimulationSnapshot<CatalystState>[] = [];
+
+  const table1Name = parsed.fromTable.name in SPARK_CATALOG ? parsed.fromTable.name : 'customers';
+  const table2Name = parsed.joins[0]?.table in SPARK_CATALOG ? parsed.joins[0].table : 'orders';
+
+  const t1Meta = SPARK_CATALOG[table1Name] || SPARK_CATALOG['customers'];
+  const t2Meta = SPARK_CATALOG[table2Name] || SPARK_CATALOG['orders'];
+
+  // Calculate actual sizes based on parameters if matching
+  const t1SizeMB = table1Name === 'customers' ? params.customersTableSizeMB : Math.round(t1Meta.sizeBytes / (1024 * 1024));
+  const t2SizeMB = table2Name === 'orders' ? params.ordersTableSizeMB : Math.round(t2Meta.sizeBytes / (1024 * 1024));
+
+  // Determine join strategy: Broadcast if smaller table is <= threshold
+  const minTableSizeMB = Math.min(t1SizeMB, t2SizeMB);
+  const canBroadcast = minTableSizeMB <= params.autoBroadcastJoinThreshold;
+  const joinType = canBroadcast ? 'BroadcastHashJoin' : 'SortMergeJoin';
+
+  // Base raw rows
+  const initialRowsTable1 = t1Meta.rowCount;
+  const initialRowsTable2 = t2Meta.rowCount;
+  const filteredRowsTable2 = params.predicatePushdown ? Math.round(initialRowsTable2 * 0.12) : initialRowsTable2;
+
+  // STEP 0: Unresolved Logical Plan
+  const step0Root: PlanNode = {
+    id: 'unresolved_project',
+    type: 'Project',
+    name: 'UnresolvedProject',
+    title: 'Project [unresolved]',
+    details: 'SELECT ' + parsed.selectColumns.map(c => c.name).join(', '),
+    outputColumns: parsed.selectColumns.map(c => c.name),
+    children: [
+      {
+        id: 'unresolved_filter',
+        type: 'Filter',
+        name: 'UnresolvedFilter',
+        title: 'Filter [unresolved]',
+        details: parsed.whereClauses.map(w => w.expression).join(' AND ') || 'o.order_amount > 250.00',
+        children: [
+          {
+            id: 'unresolved_join',
+            type: 'Join',
+            name: 'UnresolvedJoin',
+            title: 'Join [unresolved]',
+            details: `Inner Join on ${parsed.joins[0]?.condition || 'c.customer_id = o.customer_id'}`,
+            children: [
+              {
+                id: 'unresolved_rel_1',
+                type: 'UnresolvedRelation',
+                name: 'UnresolvedRelation',
+                title: `UnresolvedRelation [${table1Name}]`,
+                details: `Table reference: ${table1Name} (Catalog lookup required)`,
+                children: [],
+              },
+              {
+                id: 'unresolved_rel_2',
+                type: 'UnresolvedRelation',
+                name: 'UnresolvedRelation',
+                title: `UnresolvedRelation [${table2Name}]`,
+                details: `Table reference: ${table2Name} (Catalog lookup required)`,
+                children: [],
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  };
+
+  const step0State: CatalystState = {
+    phase: 'unresolved_logical',
+    phaseIndex: 0,
+    totalPhases: 5,
+    rootNode: step0Root,
+    stages: [],
+    generatedCode: '// Java code generation occurs during Phase 5 (WholeStageCodegen)',
+    ruleApplications: [],
+    tableMetadata: {
+      [table1Name]: { ...t1Meta, sizeBytes: t1SizeMB * 1024 * 1024 },
+      [table2Name]: { ...t2Meta, sizeBytes: t2SizeMB * 1024 * 1024 },
+    },
+    activeRule: {
+      name: 'SqlBaseParser (Antlr4)',
+      description: 'Parses raw SQL text into an Abstract Syntax Tree (AST) of Unresolved operators.',
+      scalaRule: 'org.apache.spark.sql.execution.SparkSqlParser',
+      beforeSummary: 'Raw SQL text received by SparkSession',
+      afterSummary: 'Tree of UnresolvedRelation and UnresolvedAttribute nodes'
+    }
+  };
+
+  const step0Event: SimulationEvent = {
+    id: 'evt_0',
+    step: 0,
+    timestamp: '00:00:01.012',
+    type: 'PARSING',
+    label: 'Query Parsed into AST',
+    description: 'Antlr4 parser generated Unresolved Logical Plan with placeholder relations and attributes.',
+    sourceLine: parsed.lineMap.selectLine,
+    phase: 'Unresolved Logical Plan',
+    impact: 'neutral',
+  };
+
+  const step0Explanation: StepExplanation = {
+    step: 0,
+    phase: 'Phase 1: Parse & AST Generation',
+    title: 'Unresolved Logical Plan Created',
+    whatHappened: 'The query was parsed from plain text into an abstract syntax tree composed of Unresolved Logical Plan nodes.',
+    whyItHappened: 'Before Catalyst can optimize or execute a query, it must represent its relational algebra operations (Project, Filter, Join, Relation) as an in-memory tree data structure.',
+    underlyingMechanism: 'Spark uses ANTLR4 grammar (SqlBase.g4) to tokenize keywords and build TreeNode objects. Attributes are wrapped in UnresolvedAttribute, and table names are placed in UnresolvedRelation because Spark does not yet know if the tables exist or what data types they hold.',
+    consequences: 'No disk I/O or cluster communication has occurred. Schema, column types, and semantic validity remain completely unbound.',
+    depths: {
+      beginner: 'Spark read your SQL query and turned it into an outline of operations, but it has not checked if the tables or columns really exist yet.',
+      technical: 'Parsed tokens into an Abstract Syntax Tree of Catalyst TreeNode subclasses. Nodes hold string identifiers without schema binding or catalog resolution.',
+      internals: 'Antlr4 parser instantiated AstBuilder which visited grammar rules to produce LogicalPlan instances: Project(Filter(Join(UnresolvedRelation, UnresolvedRelation))). UnresolvedAttributes lack ExprId identifiers.',
+    }
+  };
+
+  snapshots.push({
+    step: 0,
+    mode,
+    state: step0State,
+    metrics: {
+      planningTimeMs: 1.2,
+      projectedMemoryMB: t1SizeMB + t2SizeMB,
+      shuffleVolumeMB: 0,
+      shuffleExchanges: 0,
+      scannedRows: initialRowsTable1 + initialRowsTable2,
+      appliedRulesCount: 0,
+      codegenLines: 0,
+      estimatedLatencyMs: 1450,
+    },
+    activeLine: parsed.lineMap.selectLine,
+    event: step0Event,
+    explanation: step0Explanation,
+  });
+
+  // STEP 1: Analysis & Catalog Resolution
+  const step1Root: PlanNode = {
+    id: 'analyzed_project',
+    type: 'Project',
+    name: 'Project',
+    title: 'Project [Resolved]',
+    details: 'c.customer_id#1L, c.customer_name#2, c.tier#3, o.order_id#10L, o.order_amount#13, o.order_date#14',
+    schema: [
+      { name: 'customer_id', dataType: 'LongType' },
+      { name: 'customer_name', dataType: 'StringType' },
+      { name: 'tier', dataType: 'StringType' },
+      { name: 'order_id', dataType: 'LongType' },
+      { name: 'order_amount', dataType: 'DecimalType(10,2)' },
+      { name: 'order_date', dataType: 'DateType' }
+    ],
+    children: [
+      {
+        id: 'analyzed_filter',
+        type: 'Filter',
+        name: 'Filter',
+        title: 'Filter [Resolved]',
+        details: 'o.order_amount#13 > 250.00 AND c.tier#3 = "PLATINUM"',
+        children: [
+          {
+            id: 'analyzed_join',
+            type: 'Join',
+            name: 'Join',
+            title: 'Join [Resolved]',
+            details: 'Inner Join (c.customer_id#1L = o.customer_id#11L)',
+            children: [
+              {
+                id: 'resolved_rel_1',
+                type: 'LogicalRelation',
+                name: 'LogicalRelation',
+                title: `LogicalRelation [${table1Name}]`,
+                details: `Catalog: gold.${table1Name} (${t1Meta.fileFormat})`,
+                schema: t1Meta.schema,
+                children: [],
+              },
+              {
+                id: 'resolved_rel_2',
+                type: 'LogicalRelation',
+                name: 'LogicalRelation',
+                title: `LogicalRelation [${table2Name}]`,
+                details: `Catalog: gold.${table2Name} (${t2Meta.fileFormat})`,
+                schema: t2Meta.schema,
+                children: [],
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  };
+
+  const step1Event: SimulationEvent = {
+    id: 'evt_1',
+    step: 1,
+    timestamp: '00:00:01.048',
+    type: 'ANALYSIS',
+    label: 'Catalog Resolution & Type Binding',
+    description: 'Spark Metastore catalog lookup completed. Table schemas resolved and column data types verified.',
+    sourceLine: parsed.lineMap.fromLine,
+    phase: 'Analyzed Logical Plan',
+    impact: 'neutral',
+  };
+
+  const step1Explanation: StepExplanation = {
+    step: 1,
+    phase: 'Phase 2: Analysis & Catalog Lookup',
+    title: 'Analyzed Logical Plan Resolved',
+    whatHappened: 'The Analyzer resolved all table references against the Spark Metastore / SessionCatalog and assigned unique Expression IDs (`#exprId`) and data types to all attributes.',
+    whyItHappened: 'Without knowing column data types and nullability, Spark cannot verify mathematical comparisons, type coercions, or validate whether a join condition is valid.',
+    underlyingMechanism: 'The Analyzer executes a batch of rules using `SessionCatalog`. It matches `UnresolvedRelation` to physical tables/views, pulls table metadata, and transforms `UnresolvedAttribute` into `AttributeReference` bound to schema positions with verified datatypes.',
+    consequences: 'Semantic correctness is guaranteed. If a column or table had been missing, Spark would fail here with an `AnalysisException`.',
+    depths: {
+      beginner: 'Spark checked its database catalog, confirmed the tables exist, and learned what kinds of data (numbers, dates, text) each column holds.',
+      technical: 'Analyzer applied `ResolveRelations`, `ResolveReferences`, and `TypeCoercion` batches. Assigned monotonically increasing integer Expression IDs (e.g. `customer_id#1L`).',
+      internals: 'Traversed plan with `RuleExecutor[LogicalPlan]`. Looked up Hive Metastore/In-Memory Catalog to instantiate `LogicalRelation(HadoopFsRelation)`. Verified expression signatures and column existence.',
+    }
+  };
+
+  snapshots.push({
+    step: 1,
+    mode,
+    state: {
+      ...step0State,
+      phase: 'analyzed_logical',
+      phaseIndex: 1,
+      rootNode: step1Root,
+      previousRootNode: step0Root,
+      ruleApplications: [
+        { ruleName: 'ResolveRelations', timeMs: 14, affectedNode: 'LogicalRelation', description: 'Resolved table references against SessionCatalog' },
+        { ruleName: 'ResolveReferences', timeMs: 11, affectedNode: 'AttributeReference', description: 'Bound column names to schema attribute IDs' },
+      ],
+      activeRule: {
+        name: 'Analyzer.ResolveRelations & ResolveReferences',
+        description: 'Binds catalog schema metadata and assigns unique Expression IDs.',
+        scalaRule: 'org.apache.spark.sql.catalyst.analysis.Analyzer',
+        beforeSummary: 'UnresolvedRelation("customers")',
+        afterSummary: 'LogicalRelation(customers, [customer_id#1L, ...])'
+      }
+    },
+    metrics: {
+      planningTimeMs: 4.8,
+      projectedMemoryMB: t1SizeMB + t2SizeMB,
+      shuffleVolumeMB: 0,
+      shuffleExchanges: 0,
+      scannedRows: initialRowsTable1 + initialRowsTable2,
+      appliedRulesCount: 4,
+      codegenLines: 0,
+      estimatedLatencyMs: 1420,
+    },
+    activeLine: parsed.lineMap.fromLine,
+    event: step1Event,
+    explanation: step1Explanation,
+  });
+
+  // STEP 2: Logical Optimization - Rule: PushDownPredicate
+  const step2Root: PlanNode = {
+    id: 'opt_project',
+    type: 'Project',
+    name: 'Project',
+    title: 'Project',
+    details: 'c.customer_id#1L, c.customer_name#2, o.order_id#10L, o.order_amount#13',
+    children: [
+      {
+        id: 'opt_join',
+        type: 'Join',
+        name: 'Join',
+        title: 'Join [Pushed Filters]',
+        details: 'Inner Join (c.customer_id#1L = o.customer_id#11L)',
+        isTransformed: true,
+        transformationBadge: 'Join Input Pruned',
+        children: [
+          {
+            id: 'filter_c',
+            type: 'Filter',
+            name: 'Filter',
+            title: 'Filter (c.tier#3 = "PLATINUM")',
+            details: 'Pushed down: Filters customers BEFORE join',
+            isTransformed: true,
+            transformationBadge: 'Pushed Filter',
+            children: [
+              {
+                id: 'rel_c',
+                type: 'LogicalRelation',
+                name: 'LogicalRelation',
+                title: `LogicalRelation [${table1Name}]`,
+                details: `Scan ${table1Name}`,
+                pushedFilters: ["IsNotNull(customer_id)", "tier = 'PLATINUM'"],
+                children: []
+              }
+            ]
+          },
+          {
+            id: 'filter_o',
+            type: 'Filter',
+            name: 'Filter',
+            title: 'Filter (o.order_amount#13 > 250.00)',
+            details: 'Pushed down: Filters orders BEFORE join',
+            isTransformed: true,
+            transformationBadge: 'Pushed Filter',
+            children: [
+              {
+                id: 'rel_o',
+                type: 'LogicalRelation',
+                name: 'LogicalRelation',
+                title: `LogicalRelation [${table2Name}]`,
+                details: `Scan ${table2Name}`,
+                pushedFilters: ["IsNotNull(customer_id)", "order_amount > 250.00", "order_date >= '2024-01-01'"],
+                children: []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  };
+
+  const step2Event: SimulationEvent = {
+    id: 'evt_2',
+    step: 2,
+    timestamp: '00:00:01.092',
+    type: 'OPTIMIZATION',
+    label: 'Rule Applied: PushDownPredicate',
+    description: params.predicatePushdown
+      ? 'Filter conditions pushed below Join into table scan operators, filtering rows before join processing.'
+      : 'Predicate pushdown disabled via parameter flag.',
+    sourceLine: parsed.lineMap.whereLine,
+    phase: 'Optimized Logical Plan',
+    impact: 'optimization',
+  };
+
+  const step2Explanation: StepExplanation = {
+    step: 2,
+    phase: 'Phase 3: Logical Optimization',
+    title: 'Rule: PushDownPredicate Applied',
+    whatHappened: params.predicatePushdown
+      ? 'Catalyst pushed the WHERE filter predicates (`order_amount > 250` and `tier = "PLATINUM"`) through the Join operator directly onto the source table scans.'
+      : 'Predicate pushdown was disabled by user configuration, forcing full table scans into the join.',
+    whyItHappened: 'Filtering before a join drastically reduces the number of candidate tuples entering the join, avoiding wasteful CPU and memory costs.',
+    underlyingMechanism: 'Catalyst’s `PushDownPredicate` rule inspects the filter expression tree. Any predicate whose referenced attributes originate strictly from one side of the join is safely transformed down below the Join operator.',
+    consequences: `Reduces scanned records from ${(initialRowsTable1 + initialRowsTable2).toLocaleString()} down to ${(Math.round(initialRowsTable1 * 0.15) + filteredRowsTable2).toLocaleString()} rows (${Math.round((1 - (filteredRowsTable2 / initialRowsTable2)) * 100)}% data reduction before join).`,
+    depths: {
+      beginner: 'Instead of joining millions of rows and filtering afterwards, Spark filters the data right as it is read, throwing away 85% of irrelevant rows before joining.',
+      technical: 'RuleExecutor invoked `PushDownPredicate`. Predicates partitioned by deterministic attribute dependency. Pushed conjuncts to left/right branches of the Join.',
+      internals: 'Expression tree matched `Filter(condition, Join(left, right, Inner, joinCond))`. Condition split into deterministic conjuncts via `splitConjunctivePredicates`. Sub-expressions with `expr.references.subsetOf(left.outputSet)` moved to left child.',
+    }
+  };
+
+  snapshots.push({
+    step: 2,
+    mode,
+    state: {
+      ...step0State,
+      phase: 'optimized_logical',
+      phaseIndex: 2,
+      rootNode: step2Root,
+      previousRootNode: step1Root,
+      ruleApplications: [
+        { ruleName: 'PushDownPredicate', timeMs: 8, affectedNode: 'Filter / Scan', description: 'Moved predicates below Join node' },
+      ],
+      activeRule: {
+        name: 'org.apache.spark.sql.catalyst.optimizer.PushDownPredicate',
+        description: 'Transforms Filter(condition, Join) into Join(Filter(left), Filter(right)).',
+        scalaRule: 'PushDownPredicate',
+        beforeSummary: 'Filter applied AFTER Join',
+        afterSummary: 'Filters pushed BEFORE Join directly into leaf scans'
+      }
+    },
+    metrics: {
+      planningTimeMs: 8.5,
+      projectedMemoryMB: params.predicatePushdown ? Math.round(t1SizeMB * 0.3 + t2SizeMB * 0.2) : t1SizeMB + t2SizeMB,
+      shuffleVolumeMB: 0,
+      shuffleExchanges: 0,
+      scannedRows: params.predicatePushdown ? Math.round(initialRowsTable1 * 0.2) + filteredRowsTable2 : initialRowsTable1 + initialRowsTable2,
+      appliedRulesCount: 8,
+      codegenLines: 0,
+      estimatedLatencyMs: params.predicatePushdown ? 680 : 1420,
+    },
+    activeLine: parsed.lineMap.whereLine,
+    event: step2Event,
+    explanation: step2Explanation,
+  });
+
+  // STEP 3: Logical Optimization - Rule: ColumnPruning & ConstantFolding
+  const step3Root: PlanNode = {
+    ...step2Root,
+    transformationBadge: 'Columns Pruned',
+    children: [
+      {
+        ...step2Root.children[0],
+        children: [
+          {
+            ...step2Root.children[0].children[0],
+            details: 'Pushed Project: [customer_id#1L, customer_name#2, tier#3] (country, signup_date pruned)',
+          },
+          {
+            ...step2Root.children[0].children[1],
+            details: 'Pushed Project: [order_id#10L, customer_id#11L, order_amount#13] (tax_rate, region pruned)',
+          }
+        ]
+      }
+    ]
+  };
+
+  const step3Event: SimulationEvent = {
+    id: 'evt_3',
+    step: 3,
+    timestamp: '00:00:01.120',
+    type: 'OPTIMIZATION',
+    label: 'Rule Applied: ColumnPruning & ConstantFolding',
+    description: 'Pruned 8 unused columns from disk readers and simplified constant arithmetic at plan time.',
+    sourceLine: parsed.lineMap.selectLine,
+    phase: 'Optimized Logical Plan',
+    impact: 'cost_reduction',
+  };
+
+  const step3Explanation: StepExplanation = {
+    step: 3,
+    phase: 'Phase 3: Logical Optimization',
+    title: 'ColumnPruning & ConstantFolding Applied',
+    whatHappened: 'Catalyst analyzed the downstream column dependencies and pruned unreferenced columns (`country`, `signup_date`, `tax_rate`, `region`) so they will not be read from disk.',
+    whyItHappened: 'Parquet and ORC formats store data in column-oriented chunks. If a column is omitted from the scan projection, the storage engine completely skips reading its disk blocks.',
+    underlyingMechanism: '`ColumnPruning` traverses from root to leaf, collecting the `references` set of required attributes. Any attribute not in the required set is dropped from the scan output schema.',
+    consequences: 'Disk I/O bandwidth reduced by ~55%. Memory footprint of deserialized rows halved.',
+    depths: {
+      beginner: 'Spark saw you only asked for 6 columns, so it told the storage engine to ignore the other columns on disk completely, saving disk speed and RAM.',
+      technical: 'RuleExecutor evaluated `ColumnPruning`. Attribute sets propagated bottom-up to prune `LogicalRelation.output`. Pruning instructions forwarded to `FileSourceScanExec`.',
+      internals: 'Invoked `org.apache.spark.sql.catalyst.optimizer.ColumnPruning`. Pruned attributes removed from `HadoopFsRelation.dataSchema` to generate `requiredSchema`.',
+    }
+  };
+
+  snapshots.push({
+    step: 3,
+    mode,
+    state: {
+      ...step0State,
+      phase: 'optimized_logical',
+      phaseIndex: 2,
+      rootNode: step3Root,
+      previousRootNode: step2Root,
+      ruleApplications: [
+        { ruleName: 'PushDownPredicate', timeMs: 8, affectedNode: 'Filter', description: 'Moved filter below join' },
+        { ruleName: 'ColumnPruning', timeMs: 6, affectedNode: 'Project', description: 'Eliminated 8 unneeded columns' },
+        { ruleName: 'ConstantFolding', timeMs: 3, affectedNode: 'Expression', description: 'Pre-evaluated static mathematical operations' },
+      ],
+      activeRule: {
+        name: 'org.apache.spark.sql.catalyst.optimizer.ColumnPruning',
+        description: 'Eliminates unreferenced schema attributes from leaf storage scans.',
+        scalaRule: 'ColumnPruning',
+        beforeSummary: 'All 14 columns retained in scan schema',
+        afterSummary: 'Only 6 referenced columns requested from Parquet vectorized reader'
+      }
+    },
+    metrics: {
+      planningTimeMs: 12.1,
+      projectedMemoryMB: Math.round(t1SizeMB * 0.2 + t2SizeMB * 0.15),
+      shuffleVolumeMB: 0,
+      shuffleExchanges: 0,
+      scannedRows: params.predicatePushdown ? Math.round(initialRowsTable1 * 0.2) + filteredRowsTable2 : initialRowsTable1 + initialRowsTable2,
+      appliedRulesCount: 14,
+      codegenLines: 0,
+      estimatedLatencyMs: params.predicatePushdown ? 490 : 1100,
+    },
+    activeLine: parsed.lineMap.selectLine,
+    event: step3Event,
+    explanation: step3Explanation,
+  });
+
+  // STEP 4: Physical Planning - Strategy Selection (Broadcast vs SortMerge)
+  const isBroadcastSelected = canBroadcast;
+
+  const physicalJoinNode: PlanNode = isBroadcastSelected
+    ? {
+        id: 'broadcast_hash_join',
+        type: 'BroadcastHashJoin',
+        name: 'BroadcastHashJoinExec',
+        title: 'BroadcastHashJoin [BuildRight / BuildLeft]',
+        details: `Build Side: ${table1Name} (${t1SizeMB} MB <= ${params.autoBroadcastJoinThreshold} MB threshold) • No Network Shuffle required!`,
+        isTransformed: true,
+        transformationBadge: 'Broadcast Hash Join',
+        children: [
+          {
+            id: 'scan_orders',
+            type: 'FileSourceScan',
+            name: 'FileSourceScanExec',
+            title: `FileScan parquet ${table2Name}`,
+            details: `Batched: true, PushedFilters: [IsNotNull, amount > 250], Rows: ${(filteredRowsTable2).toLocaleString()}`,
+            children: []
+          },
+          {
+            id: 'broadcast_exchange',
+            type: 'BroadcastExchange',
+            name: 'BroadcastExchangeExec',
+            title: 'BroadcastExchangeExec [HashedRelation]',
+            details: `TorrentBroadcast of ${table1Name} (${t1SizeMB} MB) to all worker nodes`,
+            children: [
+              {
+                id: 'scan_customers',
+                type: 'FileSourceScan',
+                name: 'FileSourceScanExec',
+                title: `FileScan parquet ${table1Name}`,
+                details: `PushedFilters: [tier = 'PLATINUM'], Rows: ${(Math.round(initialRowsTable1 * 0.15)).toLocaleString()}`,
+                children: []
+              }
+            ]
+          }
+        ]
+      }
+    : {
+        id: 'sort_merge_join',
+        type: 'SortMergeJoin',
+        name: 'SortMergeJoinExec',
+        title: 'SortMergeJoinExec',
+        details: `Both tables exceed ${params.autoBroadcastJoinThreshold} MB threshold (${t1SizeMB} MB & ${t2SizeMB} MB) -> Requires Shuffle & Sort`,
+        isTransformed: true,
+        transformationBadge: 'SortMergeJoin (Shuffled)',
+        children: [
+          {
+            id: 'sort_orders',
+            type: 'Sort',
+            name: 'SortExec',
+            title: 'SortExec [customer_id ASC]',
+            details: 'In-memory radix sort on join key before stream merge',
+            children: [
+              {
+                id: 'shuffle_orders',
+                type: 'ShuffleExchange',
+                name: 'ShuffleExchangeExec',
+                title: `ShuffleExchangeExec [hashpartitioning, ${params.shufflePartitions} parts]`,
+                details: `Network shuffle of orders across ${params.shufflePartitions} partitions`,
+                children: [
+                  {
+                    id: 'scan_orders_smj',
+                    type: 'FileSourceScan',
+                    name: 'FileSourceScanExec',
+                    title: `FileScan parquet ${table2Name}`,
+                    details: `PushedFilters: [order_amount > 250]`,
+                    children: []
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            id: 'sort_cust',
+            type: 'Sort',
+            name: 'SortExec',
+            title: 'SortExec [customer_id ASC]',
+            details: 'In-memory sort on join key',
+            children: [
+              {
+                id: 'shuffle_cust',
+                type: 'ShuffleExchange',
+                name: 'ShuffleExchangeExec',
+                title: `ShuffleExchangeExec [hashpartitioning, ${params.shufflePartitions} parts]`,
+                details: `Network shuffle of customers across ${params.shufflePartitions} partitions`,
+                children: [
+                  {
+                    id: 'scan_cust_smj',
+                    type: 'FileSourceScan',
+                    name: 'FileSourceScanExec',
+                    title: `FileScan parquet ${table1Name}`,
+                    details: `PushedFilters: [tier = 'PLATINUM']`,
+                    children: []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      };
+
+  const step4Root: PlanNode = {
+    id: 'physical_root',
+    type: 'Project',
+    name: 'ProjectExec',
+    title: 'ProjectExec [Tungsten UnsafeRow]',
+    details: 'Materializes projection columns into UnsafeRow format',
+    children: [physicalJoinNode]
+  };
+
+  const step4Event: SimulationEvent = {
+    id: 'evt_4',
+    step: 4,
+    timestamp: '00:00:01.180',
+    type: 'PLANNING',
+    label: isBroadcastSelected ? 'Physical Plan: BroadcastHashJoin Selected' : 'Physical Plan: SortMergeJoin Selected',
+    description: isBroadcastSelected
+      ? `Table size (${minTableSizeMB} MB) is <= threshold (${params.autoBroadcastJoinThreshold} MB). BroadcastHashJoin chosen, eliminating cluster shuffle!`
+      : `Table size (${minTableSizeMB} MB) exceeds threshold (${params.autoBroadcastJoinThreshold} MB). SortMergeJoin chosen with ${params.shufflePartitions} shuffle partitions.`,
+    sourceLine: parsed.lineMap.joinLines[0] || parsed.lineMap.fromLine,
+    phase: 'Physical Planning',
+    impact: isBroadcastSelected ? 'optimization' : 'warning',
+  };
+
+  const step4Explanation: StepExplanation = {
+    step: 4,
+    phase: 'Phase 4: Physical Planning & Cost Model',
+    title: isBroadcastSelected ? 'BroadcastHashJoin Strategy Selected' : 'SortMergeJoin Strategy Selected',
+    whatHappened: isBroadcastSelected
+      ? `Catalyst selected BroadcastHashJoin because table '${table1Name}' estimated size (${minTableSizeMB} MB) is within the 'spark.sql.autoBroadcastJoinThreshold' (${params.autoBroadcastJoinThreshold} MB).`
+      : `Catalyst selected SortMergeJoin because both tables (${t1SizeMB} MB & ${t2SizeMB} MB) exceed the 'spark.sql.autoBroadcastJoinThreshold' (${params.autoBroadcastJoinThreshold} MB).`,
+    whyItHappened: 'Physical planning converts logical relational operators into concrete algorithms that can run on distributed cluster executors.',
+    underlyingMechanism: '`JoinSelection` strategy examines table size statistics. If a table fits in driver memory, it is broadcast via `TorrentBroadcast` to all executors, allowing local hash table lookups without redistributing the larger table.',
+    consequences: isBroadcastSelected
+      ? 'Zero network shuffle for the large table! Low latency, minimal disk spilling, and fast O(1) hash lookups.'
+      : `Introduces 2 ShuffleExchange stages and full network partitioning across ${params.shufflePartitions} partitions, increasing I/O and latency.`,
+    depths: {
+      beginner: isBroadcastSelected
+        ? 'Because the customer table is small, Spark sends a copy of it to every machine, so no big data shuffling over the network is needed!'
+        : 'Because both tables are large, Spark must shuffle all data across machines by customer ID and sort it before merging.',
+      technical: `JoinSelection strategy matched CanBroadcast. Selected ${joinType}. Added BroadcastExchangeExec with HashedRelation broadcast mode.`,
+      internals: 'Strategy matches on `LogicalPlan` nodes and produces candidate `Seq[SparkPlan]`. CBO cost evaluation selected `BroadcastHashJoinExec` over `SortMergeJoinExec` based on table stats.',
+    }
+  };
+
+  const shuffleBytes = isBroadcastSelected ? 0 : Math.round((t1SizeMB + t2SizeMB) * 0.85);
+  const shuffleCount = isBroadcastSelected ? 0 : 2;
+
+  snapshots.push({
+    step: 4,
+    mode,
+    state: {
+      ...step0State,
+      phase: 'physical_planning',
+      phaseIndex: 3,
+      rootNode: step4Root,
+      previousRootNode: step3Root,
+      ruleApplications: [
+        { ruleName: 'JoinSelection', timeMs: 15, affectedNode: joinType, description: `Selected ${joinType} based on threshold evaluation` },
+        { ruleName: 'EnsureRequirements', timeMs: 9, affectedNode: isBroadcastSelected ? 'BroadcastExchange' : 'ShuffleExchange', description: 'Enforced distribution and partitioning invariants' }
+      ],
+      activeRule: {
+        name: 'org.apache.spark.sql.execution.SparkStrategies.JoinSelection',
+        description: 'Chooses physical join algorithm using data size statistics and hint directives.',
+        scalaRule: 'JoinSelection',
+        beforeSummary: 'Logical Join(Inner)',
+        afterSummary: `Physical ${joinType}Exec`
+      }
+    },
+    metrics: {
+      planningTimeMs: 18.4,
+      projectedMemoryMB: isBroadcastSelected ? Math.round(t1SizeMB * 1.5 + 40) : Math.round((t1SizeMB + t2SizeMB) * 0.4 + 180),
+      shuffleVolumeMB: shuffleBytes,
+      shuffleExchanges: shuffleCount,
+      scannedRows: params.predicatePushdown ? Math.round(initialRowsTable1 * 0.2) + filteredRowsTable2 : initialRowsTable1 + initialRowsTable2,
+      appliedRulesCount: 22,
+      codegenLines: 0,
+      estimatedLatencyMs: isBroadcastSelected ? 290 : 840,
+    },
+    activeLine: parsed.lineMap.joinLines[0] || parsed.lineMap.fromLine,
+    event: step4Event,
+    explanation: step4Explanation,
+  });
+
+  // STEP 5: WholeStageCodegen & RDD Stage DAG
+  const javaCode = generateJaninoJavaCode({
+    joinType,
+    hasFilter: true,
+    filterPushedToScan: params.predicatePushdown,
+    columnsPruned: params.columnPruning,
+    wholeStageEnabled: params.wholeStageCodegen,
+    tableName1: table1Name,
+    tableName2: table2Name,
+  });
+
+  const step5Root: PlanNode = {
+    id: 'wholestage_wrapper',
+    type: 'WholeStageCodegen',
+    name: params.wholeStageCodegen ? 'WholeStageCodegen (1)' : 'VolcanoIterator (No Codegen)',
+    title: params.wholeStageCodegen ? 'WholeStageCodegen [Stage 1 - Janino Compiled]' : 'Volcano Iterator Model (Codegen Disabled)',
+    details: params.wholeStageCodegen
+      ? 'Project Tungsten: Inlined pipeline compiled directly to Java bytecode'
+      : 'Standard iterator next() calls per row across operators',
+    isWholeStageCodegen: params.wholeStageCodegen,
+    codegenStageId: 1,
+    children: [step4Root]
+  };
+
+  const rddStages: RDDStage[] = isBroadcastSelected
+    ? [
+        {
+          stageId: 0,
+          name: `Stage 0: Broadcast [${table1Name}]`,
+          operators: ['FileSourceScan', 'Filter', 'BroadcastExchange'],
+          partitions: 4,
+          parentStageIds: [],
+          isShuffle: false,
+          shuffleReadMB: 0,
+          shuffleWriteMB: 0,
+          status: 'completed',
+        },
+        {
+          stageId: 1,
+          name: `Stage 1: Pipelined Scan, Join & Project [${table2Name}]`,
+          operators: ['FileSourceScan', 'Filter', 'BroadcastHashJoin', 'Project', 'WholeStageCodegen'],
+          partitions: 16,
+          parentStageIds: [0],
+          isShuffle: false,
+          shuffleReadMB: 0,
+          shuffleWriteMB: 0,
+          status: 'active',
+        }
+      ]
+    : [
+        {
+          stageId: 0,
+          name: `Stage 0: Shuffle Map [${table1Name}]`,
+          operators: ['FileSourceScan', 'Filter', 'ShuffleExchange'],
+          partitions: 8,
+          parentStageIds: [],
+          isShuffle: true,
+          shuffleReadMB: 0,
+          shuffleWriteMB: Math.round(t1SizeMB * 0.7),
+          status: 'completed',
+        },
+        {
+          stageId: 1,
+          name: `Stage 1: Shuffle Map [${table2Name}]`,
+          operators: ['FileSourceScan', 'Filter', 'ShuffleExchange'],
+          partitions: 32,
+          parentStageIds: [],
+          isShuffle: true,
+          shuffleReadMB: 0,
+          shuffleWriteMB: Math.round(t2SizeMB * 0.6),
+          status: 'completed',
+        },
+        {
+          stageId: 2,
+          name: `Stage 2: SortMergeJoin & Output`,
+          operators: ['Sort', 'SortMergeJoin', 'Project'],
+          partitions: params.shufflePartitions,
+          parentStageIds: [0, 1],
+          isShuffle: true,
+          shuffleReadMB: Math.round((t1SizeMB + t2SizeMB) * 0.65),
+          shuffleWriteMB: 0,
+          status: 'active',
+        }
+      ];
+
+  const step5Event: SimulationEvent = {
+    id: 'evt_5',
+    step: 5,
+    timestamp: '00:00:01.240',
+    type: 'CODEGEN',
+    label: params.wholeStageCodegen ? 'Whole-Stage Code Generation Completed' : 'Volcano Execution Ready',
+    description: params.wholeStageCodegen
+      ? 'Project Tungsten compiled physical operator pipeline into a single high-performance Java class via Janino.'
+      : 'WholeStageCodegen is disabled; Spark will execute via Volcano next() iterator model.',
+    sourceLine: parsed.lineMap.selectLine,
+    phase: 'WholeStageCodegen & Execution',
+    impact: 'optimization',
+  };
+
+  const step5Explanation: StepExplanation = {
+    step: 5,
+    phase: 'Phase 5: Whole-Stage Code Generation & DAG Execution',
+    title: params.wholeStageCodegen ? 'WholeStageCodegen Executed (Tungsten Engine)' : 'Volcano Iterator Pipeline Ready',
+    whatHappened: params.wholeStageCodegen
+      ? 'Catalyst collapsed the physical operator pipeline into a single Java class (`GeneratedIteratorForCodegenStage1`) and compiled it into JVM bytecode using the Janino in-memory compiler.'
+      : 'Whole-stage code generation was disabled, causing Spark to evaluate operators row-by-row through traditional virtual method calls.',
+    whyItHappened: 'In the Volcano iterator model, each row causes hundreds of virtual function dispatches (`child.next()`), stalling CPU instruction pipelines and causing frequent cache misses. Whole-Stage Codegen flattens everything into a tight while-loop that fits entirely in CPU registers.',
+    underlyingMechanism: 'Physical operators implementing `CodegenSupport` generate fragments of Java code. `CollapseCodegenStages` groups adjacent supported operators into a `WholeStageCodegenExec` node, compiling the unified source via `CodeGenerator.compile()`.',
+    consequences: params.wholeStageCodegen
+      ? 'CPU efficiency increased by 3x-10x. Zero virtual dispatch overhead, cache-friendly off-heap UnsafeRow memory access.'
+      : 'Execution will suffer from high JVM virtual dispatch overhead and poor CPU register utilization.',
+    depths: {
+      beginner: 'Spark synthesized custom Java code on the fly for your specific query, compiling it straight into machine bytecode for maximum speed.',
+      technical: 'Operators merged under `WholeStageCodegenExec`. Synthesized code compiles via Janino and loads as `BufferedRowIterator`. UnsafeRowWriter buffers output off-heap.',
+      internals: 'Generated source implements `produce()` and `consume()` patterns across `CodegenSupport` subclasses. Evaluated variables stored in Java local primitives to allow JIT register allocation.',
+    }
+  };
+
+  const codegenLinesCount = params.wholeStageCodegen ? javaCode.split('\n').length : 0;
+
+  snapshots.push({
+    step: 5,
+    mode,
+    state: {
+      ...step0State,
+      phase: 'codegen_execution',
+      phaseIndex: 4,
+      rootNode: step5Root,
+      previousRootNode: step4Root,
+      stages: rddStages,
+      generatedCode: javaCode,
+      ruleApplications: [
+        { ruleName: 'CollapseCodegenStages', timeMs: 12, affectedNode: 'WholeStageCodegen', description: 'Grouped physical operators into compiled stage' },
+        { ruleName: 'JaninoCompilation', timeMs: 24, affectedNode: 'GeneratedIterator', description: 'Compiled Java source directly to JVM bytecode' }
+      ],
+      activeRule: {
+        name: 'org.apache.spark.sql.execution.WholeStageCodegenExec',
+        description: 'Tungsten Whole-Stage Java code generation and execution stage compilation.',
+        scalaRule: 'CollapseCodegenStages',
+        beforeSummary: 'Individual physical operator instances with virtual next() loops',
+        afterSummary: 'Single compiled Java loop keeping data in CPU registers'
+      }
+    },
+    metrics: {
+      planningTimeMs: 26.2,
+      projectedMemoryMB: isBroadcastSelected ? Math.round(t1SizeMB * 1.5 + 40) : Math.round((t1SizeMB + t2SizeMB) * 0.4 + 180),
+      shuffleVolumeMB: shuffleBytes,
+      shuffleExchanges: shuffleCount,
+      scannedRows: params.predicatePushdown ? Math.round(initialRowsTable1 * 0.2) + filteredRowsTable2 : initialRowsTable1 + initialRowsTable2,
+      appliedRulesCount: 28,
+      codegenLines: codegenLinesCount,
+      estimatedLatencyMs: isBroadcastSelected
+        ? (params.wholeStageCodegen ? 190 : 380)
+        : (params.wholeStageCodegen ? 680 : 1240),
+    },
+    activeLine: parsed.lineMap.selectLine,
+    event: step5Event,
+    explanation: step5Explanation,
+  });
+
+  return snapshots;
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/topics/sparkCatalyst/parser.ts ===
+import { ValidationResult } from '../../types/simulation';
+
+export interface ParsedQuery {
+  raw: string;
+  selectColumns: Array<{ name: string; alias?: string; line: number }>;
+  fromTable: { name: string; alias?: string; line: number };
+  joins: Array<{
+    type: 'INNER' | 'LEFT' | 'RIGHT' | 'FULL';
+    table: string;
+    alias?: string;
+    condition: string;
+    line: number;
+  }>;
+  whereClauses: Array<{ expression: string; line: number }>;
+  groupByColumns: Array<{ name: string; line: number }>;
+  havingClauses: Array<{ expression: string; line: number }>;
+  orderByColumns: Array<{ name: string; direction: 'ASC' | 'DESC'; line: number }>;
+  lineMap: {
+    selectLine: number;
+    fromLine: number;
+    whereLine: number;
+    joinLines: number[];
+    groupByLine?: number;
+    orderByLine?: number;
+  };
+}
+
+export function parseSparkQuery(queryText: string): { parsed?: ParsedQuery; error?: string } {
+  const lines = queryText.split('\n');
+  const cleanLines = lines.map((l) => l.trim());
+
+  if (!queryText.trim()) {
+    return { error: 'Empty query. Please provide a valid Spark SQL query or DataFrame operation.' };
+  }
+
+  // Find key clauses
+  let selectStart = -1;
+  let fromStart = -1;
+  let whereStart = -1;
+  let groupByStart = -1;
+  let havingStart = -1;
+  let orderByStart = -1;
+
+  for (let i = 0; i < cleanLines.length; i++) {
+    const line = cleanLines[i].toUpperCase();
+    if (line.startsWith('SELECT')) selectStart = i + 1;
+    else if (line.startsWith('FROM')) fromStart = i + 1;
+    else if (line.startsWith('WHERE')) whereStart = i + 1;
+    else if (line.startsWith('GROUP BY')) groupByStart = i + 1;
+    else if (line.startsWith('HAVING')) havingStart = i + 1;
+    else if (line.startsWith('ORDER BY')) orderByStart = i + 1;
+  }
+
+  if (selectStart === -1) {
+    return { error: 'Syntax Error: Missing SELECT statement in query.' };
+  }
+  if (fromStart === -1) {
+    return { error: 'Syntax Error: Missing FROM clause in query.' };
+  }
+
+  // Extract from table
+  const fromLineIdx = fromStart - 1;
+  const fromLineText = lines[fromLineIdx].replace(/--.*$/, '').trim();
+  const fromMatch = fromLineText.match(/FROM\s+([a-zA-Z0-9_]+)(?:\s+([a-zA-Z0-9_]+))?/i);
+  if (!fromMatch) {
+    return { error: `Invalid FROM clause at line ${fromStart}: Expected table identifier.` };
+  }
+
+  const fromTable = {
+    name: fromMatch[1].toLowerCase(),
+    alias: fromMatch[2] ? fromMatch[2].toLowerCase() : fromMatch[1].toLowerCase(),
+    line: fromStart,
+  };
+
+  // Extract joins
+  const joins: ParsedQuery['joins'] = [];
+  const joinLines: number[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i].replace(/--.*$/, '').trim();
+    const joinMatch = rawLine.match(/(?:(INNER|LEFT|RIGHT|FULL)\s+)?JOIN\s+([a-zA-Z0-9_]+)(?:\s+([a-zA-Z0-9_]+))?\s+ON\s+(.*)/i);
+    if (joinMatch) {
+      const type = (joinMatch[1]?.toUpperCase() || 'INNER') as any;
+      joins.push({
+        type,
+        table: joinMatch[2].toLowerCase(),
+        alias: joinMatch[3] ? joinMatch[3].toLowerCase() : joinMatch[2].toLowerCase(),
+        condition: joinMatch[4].trim(),
+        line: i + 1,
+      });
+      joinLines.push(i + 1);
+    }
+  }
+
+  // Extract where clauses
+  const whereClauses: ParsedQuery['whereClauses'] = [];
+  if (whereStart !== -1) {
+    let i = whereStart - 1;
+    let whereText = lines[i].replace(/--.*$/, '').replace(/WHERE/i, '').trim();
+    if (whereText) {
+      whereClauses.push({ expression: whereText, line: i + 1 });
+    }
+    i++;
+    while (i < lines.length) {
+      const l = lines[i].replace(/--.*$/, '').trim();
+      if (!l) {
+        i++;
+        continue;
+      }
+      const upper = l.toUpperCase();
+      if (upper.startsWith('GROUP BY') || upper.startsWith('ORDER BY') || upper.startsWith('HAVING') || upper.startsWith('LIMIT')) {
+        break;
+      }
+      if (upper.startsWith('AND ') || upper.startsWith('OR ')) {
+        whereClauses.push({ expression: l.replace(/^(AND|OR)\s+/i, '').trim(), line: i + 1 });
+      } else if (l.includes('=')) {
+        whereClauses.push({ expression: l, line: i + 1 });
+      }
+      i++;
+    }
+  }
+
+  // Extract select columns
+  const selectColumns: ParsedQuery['selectColumns'] = [];
+  let curLine = selectStart;
+  while (curLine <= lines.length && curLine !== fromStart) {
+    const l = lines[curLine - 1].replace(/--.*$/, '').replace(/SELECT/i, '').trim();
+    if (l) {
+      const parts = l.split(',');
+      for (const p of parts) {
+        const trimmed = p.trim();
+        if (trimmed) {
+          const aliasMatch = trimmed.match(/(.+)\s+AS\s+([a-zA-Z0-9_]+)/i);
+          if (aliasMatch) {
+            selectColumns.push({ name: aliasMatch[1].trim(), alias: aliasMatch[2].trim(), line: curLine });
+          } else {
+            selectColumns.push({ name: trimmed, line: curLine });
+          }
+        }
+      }
+    }
+    curLine++;
+  }
+
+  return {
+    parsed: {
+      raw: queryText,
+      selectColumns,
+      fromTable,
+      joins,
+      whereClauses,
+      groupByColumns: [],
+      havingClauses: [],
+      orderByColumns: [],
+      lineMap: {
+        selectLine: selectStart,
+        fromLine: fromStart,
+        whereLine: whereStart !== -1 ? whereStart : fromStart,
+        joinLines,
+        groupByLine: groupByStart !== -1 ? groupByStart : undefined,
+        orderByLine: orderByStart !== -1 ? orderByStart : undefined,
+      },
+    },
+  };
+}
+
+export function validateSparkQuery(queryText: string, validTables: string[]): ValidationResult {
+  const { parsed, error } = parseSparkQuery(queryText);
+  if (error || !parsed) {
+    return {
+      isValid: false,
+      issues: [{ message: error || 'Failed to parse query', severity: 'error' }],
+    };
+  }
+
+  const issues: ValidationResult['issues'] = [];
+
+  // Validate primary table exists in catalog
+  if (!validTables.includes(parsed.fromTable.name)) {
+    issues.push({
+      line: parsed.fromTable.line,
+      message: `Table '${parsed.fromTable.name}' not found in Spark Catalog. Available tables: ${validTables.join(', ')}`,
+      severity: 'error',
+    });
+  }
+
+  // Validate joins
+  for (const j of parsed.joins) {
+    if (!validTables.includes(j.table)) {
+      issues.push({
+        line: j.line,
+        message: `Joined table '${j.table}' not found in Spark Catalog. Available tables: ${validTables.join(', ')}`,
+        severity: 'error',
+      });
+    }
+    if (!j.condition) {
+      issues.push({
+        line: j.line,
+        message: `Join condition missing for table '${j.table}'. Cross joins require explicit Cartesian product syntax.`,
+        severity: 'warning',
+      });
+    }
+  }
+
+  return {
+    isValid: issues.filter((i) => i.severity === 'error').length === 0,
+    issues,
+  };
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/topics/sparkCatalyst/presets.ts ===
+import { ScenarioPreset } from '../../types/simulation';
+
+export const CATALYST_PRESETS: ScenarioPreset[] = [
+  {
+    id: 'preset_filter_pushdown_broadcast',
+    name: 'Filter Pushdown & Broadcast Join (Classic)',
+    description: 'Demonstrates pushdown of filter predicates into Parquet scan and conversion of large shuffle to BroadcastHashJoin.',
+    code: `-- Scenario 1: E-Commerce Customer & Orders Analysis
+-- Target: Fast analytical join with selective filtering
+SELECT 
+    c.customer_id,
+    c.customer_name,
+    c.tier,
+    o.order_id,
+    o.order_amount,
+    o.order_date
+FROM customers c
+JOIN orders o ON c.customer_id = o.customer_id
+WHERE o.order_amount > 250.00
+  AND c.tier = 'PLATINUM'
+  AND o.order_date >= '2024-01-01'
+ORDER BY o.order_amount DESC;`,
+    parameters: {
+      autoBroadcastJoinThreshold: 10,
+      enableCBO: true,
+      predicatePushdown: true,
+      columnPruning: true,
+      wholeStageCodegen: true,
+      shufflePartitions: 200,
+      customersTableSizeMB: 8,
+      ordersTableSizeMB: 450,
+    }
+  },
+  {
+    id: 'preset_sort_merge_join',
+    name: 'Large Dataset Sort-Merge Join (Shuffle Stages)',
+    description: 'When both tables exceed the broadcast threshold, Catalyst introduces ShuffleExchange and Sort operators.',
+    code: `-- Scenario 2: Large Scale Financial Transactions Join
+-- Both tables exceed autoBroadcastJoinThreshold -> Triggers SortMergeJoin
+SELECT 
+    t.transaction_id,
+    t.account_id,
+    t.amount,
+    a.account_type,
+    a.risk_score
+FROM transactions t
+JOIN accounts a ON t.account_id = a.account_id
+WHERE t.amount > 1000.00
+  AND a.status = 'ACTIVE';`,
+    parameters: {
+      autoBroadcastJoinThreshold: 10,
+      enableCBO: true,
+      predicatePushdown: true,
+      columnPruning: true,
+      wholeStageCodegen: true,
+      shufflePartitions: 200,
+      customersTableSizeMB: 120,
+      ordersTableSizeMB: 850,
+    }
+  },
+  {
+    id: 'preset_constant_folding',
+    name: 'Constant Folding & Expression Simplification',
+    description: 'Shows compile-time evaluation of constant arithmetic, static booleans, and branch elimination.',
+    code: `-- Scenario 3: Expression Optimization & Dead Code Pruning
+-- Evaluates constant math and redundant conditions at plan-time
+SELECT 
+    o.order_id,
+    o.order_amount * (1.0 - 0.15) AS discounted_amount,
+    o.order_date
+FROM orders o
+WHERE o.status = 'COMPLETED'
+  AND (100 * 24 * 60) > 10000
+  AND 1 = 1
+  AND (o.tax_rate + 0.05) > 0.10;`,
+    parameters: {
+      autoBroadcastJoinThreshold: 10,
+      enableCBO: true,
+      predicatePushdown: true,
+      columnPruning: true,
+      wholeStageCodegen: true,
+      shufflePartitions: 200,
+      customersTableSizeMB: 10,
+      ordersTableSizeMB: 300,
+    }
+  },
+  {
+    id: 'preset_aggregation_skew',
+    name: 'HashAggregate & Shuffle Partitions',
+    description: 'Illustrates two-phase aggregation (partial aggregate on mapper, final aggregate after shuffle exchange).',
+    code: `-- Scenario 4: High-Cardinality Regional Sales Rollup
+-- Uses HashAggregate with map-side partial aggregation
+SELECT 
+    o.region,
+    COUNT(o.order_id) AS total_orders,
+    SUM(o.order_amount) AS gross_revenue,
+    AVG(o.order_amount) AS avg_order_value
+FROM orders o
+WHERE o.order_date >= '2024-01-01'
+GROUP BY o.region
+HAVING SUM(o.order_amount) > 50000;`,
+    parameters: {
+      autoBroadcastJoinThreshold: 10,
+      enableCBO: true,
+      predicatePushdown: true,
+      columnPruning: true,
+      wholeStageCodegen: true,
+      shufflePartitions: 200,
+      customersTableSizeMB: 10,
+      ordersTableSizeMB: 500,
+    }
+  },
+  {
+    id: 'preset_three_way_join_cbo',
+    name: '3-Way Join Reordering with CBO',
+    description: 'Cost-Based Optimizer utilizes table statistics and histograms to reorder join sequence for minimal intermediate volume.',
+    code: `-- Scenario 5: Multi-table Order Fulfillment Pipeline
+-- CBO reorders joins: small table filtered first to minimize intermediate rows
+SELECT 
+    c.customer_name,
+    p.product_name,
+    o.order_amount,
+    o.quantity
+FROM customers c
+JOIN orders o ON c.customer_id = o.customer_id
+JOIN products p ON o.product_id = p.product_id
+WHERE c.country = 'USA'
+  AND p.category = 'Electronics';`,
+    parameters: {
+      autoBroadcastJoinThreshold: 10,
+      enableCBO: true,
+      predicatePushdown: true,
+      columnPruning: true,
+      wholeStageCodegen: true,
+      shufflePartitions: 200,
+      customersTableSizeMB: 12,
+      ordersTableSizeMB: 600,
+    }
+  }
+];
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/topics/volcanoOptimizer/definition.ts ===
+import { SimulationTopic, SimulationSnapshot } from '../../types/simulation';
+
+export interface VolcanoState {
+  phase: 'Parsing' | 'LogicalTree' | 'CostEstimation' | 'PhysicalSelection' | 'Execution';
+  selectedPlan: string;
+  memoTable: Array<{ group: string; operator: string; cost: number; isWinner: boolean }>;
+  activeOperation: string;
+}
+
+export const VOLCANO_OPTIMIZER_TOPIC: SimulationTopic<VolcanoState, string> = {
+  id: 'volcano_optimizer',
+  name: 'Volcano / System R Cost-Based Optimizer',
+  shortName: 'Volcano CBO',
+  category: 'Relational Database Internals',
+  description: 'Explores dynamic programming memoization, cost search space exploration, index scan vs sequential scan, and nested loop vs hash join decisions in traditional RDBMS engines.',
+  inputLanguage: 'sql',
+  defaultCode: `SELECT e.name, d.department_name, e.salary
+FROM employees e
+JOIN departments d ON e.dept_id = d.id
+WHERE e.salary > 75000 AND d.budget > 500000;`,
+  presets: [
+    {
+      id: 'volcano_index_vs_seq',
+      name: 'Index Scan vs Full Table Scan',
+      description: 'Demonstrates when the optimizer flips from B-Tree index lookup to sequential scan based on selectivity.',
+      code: `SELECT * FROM users WHERE age > 25 AND country = 'CA';`,
+      parameters: { indexSelectivityPct: 15, tableTotalPages: 5000 }
+    },
+    {
+      id: 'volcano_join_strategy',
+      name: 'Hash Join vs Nested Loop',
+      description: 'Compares nested loop join vs in-memory hash join based on buffer pool capacity.',
+      code: `SELECT * FROM orders o JOIN lineitems l ON o.id = l.order_id;`,
+      parameters: { bufferPoolMB: 64, joinMethod: 'HashJoin' }
+    }
+  ],
+  parameters: [
+    {
+      id: 'indexSelectivityPct',
+      label: 'Predicate Selectivity (%)',
+      type: 'range',
+      defaultValue: 15,
+      min: 1,
+      max: 100,
+      step: 1,
+      unit: '%',
+      description: 'Percentage of table rows matching the query condition. Low selectivity favors index scan; high selectivity favors sequential scan.',
+    },
+    {
+      id: 'bufferPoolMB',
+      label: 'Database Buffer Pool',
+      type: 'range',
+      defaultValue: 64,
+      min: 16,
+      max: 512,
+      step: 16,
+      unit: 'MB',
+      description: 'Dedicated RAM for shared table buffers and hash join work areas.',
+    },
+    {
+      id: 'enableIndexScan',
+      label: 'Enable Index Scans',
+      type: 'boolean',
+      defaultValue: true,
+      description: 'Allow query optimizer to pick B-tree indexes if cost is lower.',
+    }
+  ],
+  metrics: [
+    { id: 'totalCost', label: 'Optimizer Total Cost', format: 'number', isKeyMetric: true },
+    { id: 'ioReads', label: 'Disk Block I/O Reads', format: 'count', isKeyMetric: true },
+    { id: 'memoryUsedMB', label: 'Buffer Cache Used', unit: 'MB', format: 'bytes' },
+    { id: 'exploredPlans', label: 'Memo Search Space', format: 'count' },
+  ],
+  docs: {
+    overview: 'The Volcano/Cascades framework (and System R) evaluates queries through goal-driven search and memoization. It explores candidate physical plans, computes cost models based on I/O and CPU, and picks the global minimum.',
+    inputs: 'SQL relational query with tunable buffer cache, selectivity, and access method flags.',
+    executionModel: 'Dynamic programming memo table partitions operators into equivalence groups, generating candidate implementations and pruning unviable sub-plans.',
+    importantConcepts: ['Memo Equivalence Groups', 'B-Tree Index Clustering', 'Cost Function: I/O Cost + CPU Weight * Tuples'],
+    performanceImplications: 'Incorrect statistics cause the optimizer to select catastrophic nested loop joins or random I/O index scans on large data fractions.',
+    simulationNotes: 'Educational model demonstrating Volcano cost estimation and equivalence group memo expansion.'
+  },
+  parse: (input: string) => ({ ast: { text: input } }),
+  validate: (input: string) => ({
+    isValid: input.trim().length > 0,
+    issues: input.trim().length > 0 ? [] : [{ message: 'Input cannot be empty', severity: 'error' }]
+  }),
+  buildExecutionPlan: (input: string, params: Record<string, any>) => {
+    const selectivity = params.indexSelectivityPct ?? 15;
+    const isIndexFavored = selectivity < 20 && (params.enableIndexScan ?? true);
+    const chosenAccess = isIndexFavored ? 'IndexScan (B-Tree on dept_id)' : 'SeqScan (Heap scan)';
+    const cost = isIndexFavored ? Math.round(selectivity * 28 + 120) : Math.round(520 + selectivity * 8);
+
+    const steps: SimulationSnapshot<VolcanoState>[] = [
+      {
+        step: 0,
+        mode: 'DEFAULT',
+        state: {
+          phase: 'Parsing',
+          selectedPlan: 'Initial Relational Algebra Tree',
+          memoTable: [],
+          activeOperation: 'Parse SQL text into Relational Operators'
+        },
+        metrics: { totalCost: 0, ioReads: 0, memoryUsedMB: 4, exploredPlans: 1 },
+        activeLine: 1,
+        event: {
+          id: 'v_0',
+          step: 0,
+          timestamp: '00:00:00.100',
+          type: 'PARSE',
+          label: 'Relational Expression Parsed',
+          description: 'SQL statement parsed into relational operators (Project, Filter, Join, Scan).'
+        },
+        explanation: {
+          step: 0,
+          phase: 'Parsing & Normalization',
+          title: 'Relational Expression Initialized',
+          whatHappened: 'Created initial logical operator tree.',
+          whyItHappened: 'Volcano requires an initial relational representation before applying equivalence transformations.',
+          underlyingMechanism: 'Lexical parsing generates a logical operator tree: Project(Join(Scan, Scan)).',
+          consequences: 'Plan is ready for memo table insertion.'
+        }
+      },
+      {
+        step: 1,
+        mode: 'DEFAULT',
+        state: {
+          phase: 'LogicalTree',
+          selectedPlan: 'Memo Group 0: Project, Group 1: Join, Group 2: Scan',
+          memoTable: [
+            { group: 'Group 0', operator: 'LogicalProject', cost: 10, isWinner: true },
+            { group: 'Group 1', operator: 'LogicalJoin', cost: 340, isWinner: true },
+            { group: 'Group 2', operator: 'LogicalScan(employees)', cost: 180, isWinner: true },
+          ],
+          activeOperation: 'Populate Memo Equivalence Groups'
+        },
+        metrics: { totalCost: 530, ioReads: 210, memoryUsedMB: 12, exploredPlans: 6 },
+        activeLine: 2,
+        event: {
+          id: 'v_1',
+          step: 1,
+          timestamp: '00:00:00.220',
+          type: 'MEMO_EXPANSION',
+          label: 'Memo Table Populated',
+          description: 'Constructed equivalence classes and registered rule transformations.'
+        },
+        explanation: {
+          step: 1,
+          phase: 'Search Space Expansion',
+          title: 'Equivalence Groups Built',
+          whatHappened: 'Sub-plans grouped into equivalence classes to prevent redundant re-computation.',
+          whyItHappened: 'Without dynamic programming memoization, join order exploration produces exponential O(N!) complexity.',
+          underlyingMechanism: 'Cascades memo structures organize equivalent logical plans into Groups with shared properties.',
+          consequences: 'Enables top-down branch-and-bound cost pruning.'
+        }
+      },
+      {
+        step: 2,
+        mode: 'DEFAULT',
+        state: {
+          phase: 'CostEstimation',
+          selectedPlan: `Candidate Access Path Evaluation: ${chosenAccess}`,
+          memoTable: [
+            { group: 'Group 2', operator: 'SeqScan(employees)', cost: 580, isWinner: !isIndexFavored },
+            { group: 'Group 2', operator: 'IndexScan(employees_dept_idx)', cost: Math.round(selectivity * 28 + 120), isWinner: isIndexFavored },
+            { group: 'Group 1', operator: 'HashJoin', cost: 420, isWinner: true },
+            { group: 'Group 1', operator: 'NestedLoopJoin', cost: 1850, isWinner: false },
+          ],
+          activeOperation: `Evaluate Cost Model for Access Methods (Selectivity: ${selectivity}%)`
+        },
+        metrics: { totalCost: cost, ioReads: isIndexFavored ? 140 : 580, memoryUsedMB: 32, exploredPlans: 14 },
+        activeLine: 4,
+        event: {
+          id: 'v_2',
+          step: 2,
+          timestamp: '00:00:00.410',
+          type: 'COST_EVAL',
+          label: isIndexFavored ? 'Index Scan Selected by Cost Model' : 'Sequential Scan Selected (High Selectivity)',
+          description: isIndexFavored
+            ? `Selectivity (${selectivity}%) is low. Index scan cost (${cost}) beats sequential scan.`
+            : `Selectivity (${selectivity}%) is high. Sequential scan chosen to avoid random disk seeks.`
+        },
+        explanation: {
+          step: 2,
+          phase: 'Physical Strategy Selection',
+          title: `${chosenAccess} Chosen`,
+          whatHappened: `Cost model evaluated access paths and selected ${chosenAccess}.`,
+          whyItHappened: isIndexFavored
+            ? 'Predicate matches a small percentage of rows; fetching index leaf pages plus clustered heap blocks is cheaper.'
+            : 'At higher selectivities, random I/O seeks across index leaves degrade performance below contiguous sequential reads.',
+          underlyingMechanism: 'Cost formula: Cost = (DiskPagesRead * 1.0) + (TuplesScanned * 0.01) + (RandomSeekPenalty * 4.0).',
+          consequences: `Estimated physical execution cost locked in at ${cost} units.`
+        }
+      },
+      {
+        step: 3,
+        mode: 'DEFAULT',
+        state: {
+          phase: 'Execution',
+          selectedPlan: `Physical Plan: HashJoin -> ${chosenAccess}`,
+          memoTable: [
+            { group: 'Group 0', operator: 'PhysicalProject', cost: 10, isWinner: true },
+            { group: 'Group 1', operator: 'HashJoin', cost: 280, isWinner: true },
+            { group: 'Group 2', operator: chosenAccess, cost: cost, isWinner: true },
+          ],
+          activeOperation: 'Iterator Execution Pipeline Ready'
+        },
+        metrics: { totalCost: cost + 290, ioReads: isIndexFavored ? 160 : 610, memoryUsedMB: 48, exploredPlans: 14 },
+        activeLine: 1,
+        event: {
+          id: 'v_3',
+          step: 3,
+          timestamp: '00:00:00.600',
+          type: 'PLAN_FINALIZED',
+          label: 'Physical Query Plan Finalized',
+          description: 'Volcano query execution engine loaded physical iterator tree.'
+        },
+        explanation: {
+          step: 3,
+          phase: 'Execution Pipeline',
+          title: 'Physical Plan Ready',
+          whatHappened: 'Best plan selected from memo table and instantiated into physical operator iterator tree.',
+          whyItHappened: 'The query optimization phase concluded with the lowest-cost physical execution tree.',
+          underlyingMechanism: 'Engine initializes root operator iterator. Downstream open(), next(), and close() methods are invoked.',
+          consequences: 'Query engine executes execution pipeline.'
+        }
+      }
+    ];
+
+    return { steps, totalSteps: steps.length };
+  }
+};
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/types/catalyst.ts ===
+/**
+ * Spark Catalyst Optimizer domain types.
+ * Models the AST, Logical Plans, Optimization Rules, Physical Plans, and Codegen Stages.
+ */
+
+export type CatalystPhaseId = 
+  | 'unresolved_logical'
+  | 'analyzed_logical'
+  | 'optimized_logical'
+  | 'physical_planning'
+  | 'codegen_execution';
+
+export interface CatalystPhaseMeta {
+  id: CatalystPhaseId;
+  name: string;
+  shortName: string;
+  stageNumber: number;
+  description: string;
+}
+
+export type PlanNodeType =
+  | 'UnresolvedRelation'
+  | 'LogicalRelation'
+  | 'Filter'
+  | 'Project'
+  | 'Join'
+  | 'Aggregate'
+  | 'Sort'
+  | 'BroadcastExchange'
+  | 'ShuffleExchange'
+  | 'BroadcastHashJoin'
+  | 'SortMergeJoin'
+  | 'ShuffledHashJoin'
+  | 'HashAggregate'
+  | 'FileSourceScan'
+  | 'WholeStageCodegen';
+
+export interface PlanAttribute {
+  name: string;
+  dataType: string;
+  nullable?: boolean;
+}
+
+export interface PlanNode {
+  id: string;
+  type: PlanNodeType;
+  name: string;
+  title: string;
+  details: string;
+  schema?: PlanAttribute[];
+  pushedFilters?: string[];
+  outputColumns?: string[];
+  joinType?: 'INNER' | 'LEFT' | 'RIGHT' | 'FULL';
+  joinCondition?: string;
+  sortKeys?: string[];
+  partitionKeys?: string[];
+  costEstimate?: {
+    rows: number;
+    sizeBytes: number;
+    cpuCost: number;
+  };
+  isWholeStageCodegen?: boolean;
+  codegenStageId?: number;
+  isTransformed?: boolean;
+  transformationBadge?: string;
+  children: PlanNode[];
+}
+
+export interface CatalystRule {
+  id: string;
+  name: string;
+  phase: CatalystPhaseId;
+  description: string;
+  scalaClass: string;
+  category: 'Analysis' | 'LogicalOptimization' | 'PhysicalPlanning' | 'CodeGeneration';
+}
+
+export interface RDDStage {
+  stageId: number;
+  name: string;
+  operators: string[];
+  partitions: number;
+  parentStageIds: number[];
+  isShuffle: boolean;
+  shuffleReadMB: number;
+  shuffleWriteMB: number;
+  status: 'pending' | 'active' | 'completed';
+}
+
+export interface CatalystState {
+  phase: CatalystPhaseId;
+  phaseIndex: number;
+  totalPhases: number;
+  activeRule?: {
+    name: string;
+    description: string;
+    scalaRule: string;
+    beforeSummary: string;
+    afterSummary: string;
+  };
+  rootNode: PlanNode;
+  previousRootNode?: PlanNode;
+  selectedNodeId?: string;
+  stages: RDDStage[];
+  generatedCode: string;
+  ruleApplications: Array<{
+    ruleName: string;
+    timeMs: number;
+    affectedNode: string;
+    description: string;
+  }>;
+  tableMetadata: Record<string, {
+    tableName: string;
+    rowCount: number;
+    sizeBytes: number;
+    schema: PlanAttribute[];
+    fileFormat: string;
+    location: string;
+  }>;
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/src/types/simulation.ts ===
+/**
+ * Core topic-agnostic simulation types and interfaces.
+ * Defines the contract for any technical simulation topic plugged into the workstation.
+ */
+
+export type SimulationStatus = 'idle' | 'running' | 'paused' | 'completed' | 'error';
+export type ExecutionMode = 'DEFAULT' | 'CUSTOM';
+export type ExplanationDepth = 'beginner' | 'technical' | 'internals';
+
+export interface ParameterOption {
+  label: string;
+  value: string | number | boolean;
+  description?: string;
+}
+
+export interface ParameterDefinition {
+  id: string;
+  label: string;
+  type: 'number' | 'boolean' | 'select' | 'range' | 'text';
+  defaultValue: any;
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+  options?: ParameterOption[];
+  description?: string;
+  category?: string;
+}
+
+export interface MetricDefinition {
+  id: string;
+  label: string;
+  unit?: string;
+  format?: 'number' | 'bytes' | 'duration' | 'percentage' | 'count';
+  description?: string;
+  isKeyMetric?: boolean;
+}
+
+export interface SimulationEvent {
+  id: string;
+  step: number;
+  timestamp: string;
+  type: string;
+  label: string;
+  description: string;
+  sourceLine?: number;
+  phase?: string;
+  impact?: 'neutral' | 'optimization' | 'cost_reduction' | 'transformation' | 'warning';
+  metadata?: Record<string, any>;
+}
+
+export interface StepExplanation {
+  step: number;
+  phase: string;
+  title: string;
+  whatHappened: string;
+  whyItHappened: string;
+  underlyingMechanism: string;
+  consequences: string;
+  technicalDetails?: string;
+  depths?: {
+    beginner: string;
+    technical: string;
+    internals: string;
+  };
+}
+
+export interface ValidationIssue {
+  line?: number;
+  column?: number;
+  message: string;
+  severity: 'error' | 'warning';
+}
+
+export interface ValidationResult {
+  isValid: boolean;
+  issues: ValidationIssue[];
+}
+
+export interface SimulationSnapshot<TState = any> {
+  step: number;
+  mode: ExecutionMode;
+  state: TState;
+  metrics: Record<string, number>;
+  activeLine?: number;
+  event?: SimulationEvent;
+  explanation?: StepExplanation;
+}
+
+export interface ScenarioPreset {
+  id: string;
+  name: string;
+  description: string;
+  code: string;
+  parameters?: Record<string, any>;
+}
+
+export interface TopicDocs {
+  overview: string;
+  inputs: string;
+  executionModel: string;
+  importantConcepts: string[];
+  performanceImplications: string;
+  simulationNotes: string;
+}
+
+export interface SimulationTopic<TState = any, TInput = string> {
+  id: string;
+  name: string;
+  shortName: string;
+  category: string;
+  description: string;
+  inputLanguage: string;
+  defaultCode: string;
+  presets: ScenarioPreset[];
+  parameters: ParameterDefinition[];
+  metrics: MetricDefinition[];
+  docs: TopicDocs;
+
+  // Engine hooks
+  parse: (input: TInput) => { ast: any; error?: string };
+  validate: (input: TInput, params: Record<string, any>) => ValidationResult;
+  buildExecutionPlan: (input: TInput, params: Record<string, any>) => {
+    steps: SimulationSnapshot<TState>[];
+    totalSteps: number;
+  };
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/tsconfig.json ===
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+    "module": "ESNext",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "allowJs": true,
+    "jsx": "react-jsx",
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    },
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  }
+}
+
+=== spark-catalyst-optimizer-simulator (1) (1)/vite.config.ts ===
+import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
+import {defineConfig} from 'vite';
+
+export default defineConfig(() => {
+  return {
+    plugins: [react(), tailwindcss()],
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, '.'),
+      },
+    },
+    server: {
+      port: 3000,
+      host: '0.0.0.0',
+      // HMR is disabled in AI Studio via DISABLE_HMR env var.
+      hmr: process.env.DISABLE_HMR !== 'true',
+      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
+      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+    },
+  };
+});
+
